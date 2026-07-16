@@ -1,5 +1,5 @@
 """
-Central app state.
+Central app state
 """
 import reflex as rx
 
