@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 import spacy
 from spacy.matcher import PhraseMatcher
+from spacy.util import filter_spans
 
 from src.utils.db import get_connection
 
@@ -107,5 +108,9 @@ class SkillMatcher:
                     end_char=span.end_char,
                 )
             )
+
+        spans = [doc.char_span(r.start_char, r.end_char) for r in results]
+        keep = {(s.start_char, s.end_char) for s in filter_spans([s for s in spans if s])}
+        results = [r for r in results if (r.start_char, r.end_char) in keep]
 
         return results
