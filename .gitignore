@@ -24,3 +24,4 @@ data/taxonomy/*
 .idea/
 .ipynb_checkpoints/
 *.log
+venv.nosync/

@@ -41,8 +41,10 @@ def build(corpus_dir: Path, output_path: Path, limit: int | None = None) -> dict
         p for p in corpus_dir.rglob("*")
         if p.suffix.lower() in (".pdf", ".docx", ".txt")
     )
-    if limit:
-        files = files[:limit]
+    if limit and limit < len(files):
+        import random
+        random.seed(42)          # reproducible sample
+        files = random.sample(files, limit)
     if not files:
         raise SystemExit(f"no resume files found under {corpus_dir}")
 
