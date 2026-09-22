@@ -52,8 +52,14 @@ DEGREE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# decimals are captured as part of the number ("6.8 years" -> 6.8). The
+# earlier version only took whole digits, so the \b before the "8" in
+# "6.8" let it match "8 years" and read 6.8 as 8. The lookbehind stops a
+# match starting mid-number for the same reason
+_YEARS_NUMBER = r"\d{1,2}(?:\.\d{1,2})?"
 YEARS_EXPERIENCE_PATTERN = re.compile(
-    r"\b(\d{1,2})\+?\s*(?:-|to)?\s*(\d{1,2})?\+?\s*years?\b(?:\s+of)?(?:\s+experience)?",
+    r"(?<![\d.])(" + _YEARS_NUMBER + r")\+?\s*(?:-|to)?\s*(" + _YEARS_NUMBER + r")?\+?\s*years?\b"
+    r"(?:\s+of)?(?:\s+experience)?",
     re.IGNORECASE,
 )
 
@@ -65,6 +71,11 @@ TITLE_KEYWORDS = [
     "analyst", "engineer", "scientist", "developer", "manager", "consultant",
     "intern", "internship", "associate", "director", "lead", "architect",
     "specialist", "coordinator",
+    # general-workforce titles — the original list only covered tech and
+    # professional services, so the actual title header was missed on
+    # accounting, admin, healthcare and trades resumes
+    "accountant", "auditor", "administrator", "assistant", "clerk",
+    "officer", "technician", "advisor", "supervisor", "representative",
 ]
 _TITLE_KEYWORD_PATTERN = re.compile(
     r"\b(" + "|".join(TITLE_KEYWORDS) + r")\b", re.IGNORECASE
@@ -76,7 +87,7 @@ class ExtractedEntities:
     skills: list = field(default_factory=list)              # list[SkillMatch]
     titles: list = field(default_factory=list)              # list[str]
     education: list = field(default_factory=list)           # list[str]
-    years_experience: list = field(default_factory=list)    # list[int]
+    years_experience: list = field(default_factory=list)    # list[int | float]
 
 
 def extract_titles(text: str) -> list[str]:
@@ -107,14 +118,20 @@ def extract_education(text: str) -> list[str]:
     return results
 
 
-def extract_years_experience(text: str) -> list[int]:
+def _to_number(value: str) -> int | float:
+    # whole numbers stay ints so "5 years" is still stored as "5", not "5.0"
+    number = float(value)
+    return int(number) if number.is_integer() else number
+
+
+def extract_years_experience(text: str) -> list[int | float]:
     years = []
     for m in YEARS_EXPERIENCE_PATTERN.finditer(text):
         low, high = m.group(1), m.group(2)
         if high:
-            years.append(int(high))  # range given – take the upper bound
+            years.append(_to_number(high))  # range given – take the upper bound
         elif low:
-            years.append(int(low))
+            years.append(_to_number(low))
     return sorted(set(years), reverse=True)
 
 

@@ -81,3 +81,42 @@ def test_extract_titles_no_substring_false_positive():
     text = "Directorate which previously did not exist.\nManagerial oversight of reports."
     titles = extract_titles(text)
     assert titles == []
+
+def test_extract_years_experience_decimal():
+    # known limitation until fixed: the "8" in "6.8" was matched on its own
+    text = "Total IT experience 6.8 years"
+    assert extract_years_experience(text) == [6.8]
+
+
+def test_extract_years_experience_decimal_hyphenated():
+    text = "Experience: 3.2-years in mainframe support"
+    assert extract_years_experience(text) == [3.2]
+
+
+def test_extract_years_experience_decimal_range():
+    text = "2.5 to 4.5 years of experience"
+    assert extract_years_experience(text) == [4.5]
+
+
+def test_extract_years_experience_whole_numbers_stay_int():
+    result = extract_years_experience("5+ years experience required.")
+    assert result == [5]
+    assert isinstance(result[0], int)
+
+
+def test_extract_titles_general_workforce():
+    text = (
+        "Staff Accountant\n"
+        "Administrative Assistant\n"
+        "Maintenance Technician\n"
+        "Customer Service Representative\n"
+        "Compliance Officer"
+    )
+    titles = extract_titles(text)
+    assert titles == text.splitlines()
+
+
+def test_extract_titles_general_workforce_no_substring_false_positive():
+    # whole-word matching still applies to the added keywords
+    text = "Assisted the audit team.\nSupervised weekend shifts.\nAdvisory board member."
+    assert extract_titles(text) == []

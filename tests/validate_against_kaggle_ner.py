@@ -145,8 +145,8 @@ def years_hit(gt_text: str, our_years: list[int]) -> bool:
     '15 Months', '3.2-years'). Rather than re-deriving an exact number,
     check whether any digit token in the ground truth text is within 1 of
     something we extracted – close enough to confirm we're in the right
-    neighborhood, not exact-match (which our regex isn't designed for on
-    decimals anyway)."""
+    neighborhood. Ground truth also includes months and 'Yrs', which the
+    extractor doesn't read, so exact-match would understate it."""
     if not our_years:
         return False
     gt_numbers = [float(n) for n in _YEARS_NUM_PATTERN.findall(gt_text)]

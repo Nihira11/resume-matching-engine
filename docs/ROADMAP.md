@@ -25,7 +25,7 @@ Full detail in `docs/REPO-AND-DATA-SETUP.md`.
 - ATS parsability scoring: detect tables, multi-column layout, images, headers/footers – flag formatting that causes real ATS engines to drop or scramble content, independent of what the resume says
 - spaCy NER: extract skills, job titles, education, years of experience
 - Skill matching against the ESCO taxonomy (including alias matching)
-- Validated against the Kaggle labelled entity dataset – found and fixed three real extraction bugs, documented two known limitations
+- Validated against the Kaggle labelled entity dataset – found and fixed four real extraction bugs, documented one known limitation
 - Store structured extraction results in Postgres
 
 Full detail in `docs/PARSING-AND-EXTRACTION.md`.
