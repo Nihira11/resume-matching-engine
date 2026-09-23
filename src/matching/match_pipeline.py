@@ -17,8 +17,14 @@ import sys
 from src.matching.bm25_scorer import BM25Scorer
 from src.matching.embeddings import embed_and_store, load_chunk_vectors
 from src.matching.experience_match import score_experience
+from dataclasses import dataclass
+
+import numpy as np
+
 from src.matching.gap_analysis import analyse_gaps
 from src.matching.profiles import (
+    JDProfile,
+    ResumeProfile,
     load_jd_profile,
     load_resume_profile,
     refresh_is_required,
@@ -29,21 +35,42 @@ from src.matching.skill_overlap import score_skill_overlap
 from src.matching.title_match import score_title_match
 
 
+@dataclass
+class PreloadedDocuments:
+    """Anything the caller already has in memory, to skip re-fetching."""
+    resume: ResumeProfile | None = None
+    jd: JDProfile | None = None
+    resume_vectors: "np.ndarray | None" = None
+    jd_vectors: "np.ndarray | None" = None
+
+
 def run_match(
     resume_id: int,
     jd_id: int,
     refresh_embeddings: bool = False,
     refresh_requirements: bool = True,
     save: bool = True,
+    preloaded: "PreloadedDocuments | None" = None,
 ):
+    """Score one resume against one JD.
+
+    `preloaded` lets a caller supply profiles and chunk vectors it already
+    holds. Every one of those is a separate round trip to a remote
+    database -- ~550ms each even on a warm pooled connection -- and a UI
+    scoring the same resume against posting after posting would otherwise
+    re-fetch identical rows each time. Defaults to loading everything, so
+    CLI behaviour is unchanged.
+    """
+    preloaded = preloaded or PreloadedDocuments()
+
     if refresh_requirements:
         # jd_pipeline defaults every JD entity to is_required=TRUE. Re-derive
         # it from section headings before scoring, otherwise every wishlist
         # item is treated as a hard requirement.
         refresh_is_required(jd_id)
 
-    resume = load_resume_profile(resume_id)
-    jd = load_jd_profile(jd_id)
+    resume = preloaded.resume or load_resume_profile(resume_id)
+    jd = preloaded.jd or load_jd_profile(jd_id)
 
     overlap = score_skill_overlap(resume, jd)
     title = score_title_match(resume, jd)
@@ -66,8 +93,16 @@ def run_match(
         embed_and_store("resume", resume_id, resume.cleaned_text)
         embed_and_store("jd", jd_id, jd.cleaned_text)
 
-    resume_vectors = load_chunk_vectors("resume", resume_id)
-    jd_vectors = load_chunk_vectors("jd", jd_id)
+    resume_vectors = (
+        preloaded.resume_vectors
+        if preloaded.resume_vectors is not None
+        else load_chunk_vectors("resume", resume_id)
+    )
+    jd_vectors = (
+        preloaded.jd_vectors
+        if preloaded.jd_vectors is not None
+        else load_chunk_vectors("jd", jd_id)
+    )
     if resume_vectors.size == 0 or jd_vectors.size == 0:
         print(
             "warning: no chunk embeddings stored for this pair – re-run with "

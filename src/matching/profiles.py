@@ -327,17 +327,23 @@ def refresh_is_required(jd_id: int) -> int:
     )
     entities = cur.fetchall()
 
+    # One UPDATE for the whole set, not one per entity. Against a hosted
+    # database each statement is a ~550ms round trip, so a posting with 30
+    # skills spent ~15s here re-deriving flags that fit in a single query.
+    downgrade = [
+        entity_id
+        for entity_id, entity_value in entities
+        if (term := (entity_value or "").lower().strip())
+        and term in preferred_text
+        and term not in required_text
+    ]
     changed = 0
-    for entity_id, entity_value in entities:
-        term = (entity_value or "").lower().strip()
-        if not term:
-            continue
-        if term in preferred_text and term not in required_text:
-            cur.execute(
-                "UPDATE jd_entities SET is_required = FALSE WHERE entity_id = %s",
-                (entity_id,),
-            )
-            changed += cur.rowcount
+    if downgrade:
+        cur.execute(
+            "UPDATE jd_entities SET is_required = FALSE WHERE entity_id = ANY(%s)",
+            (downgrade,),
+        )
+        changed = cur.rowcount
 
     conn.commit()
     cur.close()

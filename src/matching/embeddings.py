@@ -25,7 +25,7 @@ from src.matching.config import (
     EMBEDDING_MODEL,
 )
 from src.matching.jd_sections import strip_boilerplate
-from src.utils.db import get_connection
+from src.utils.db import connection, get_connection
 
 _model = None
 
@@ -129,22 +129,30 @@ def embed_and_store(kind: str, doc_id: int, text: str) -> int:
     doc_table = "resumes" if kind == "resume" else "job_descriptions"
     id_column = "resume_id" if kind == "resume" else "jd_id"
 
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(f"DELETE FROM {chunk_table} WHERE {id_column} = %s", (doc_id,))
-    for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+    # Upsert rather than delete-then-insert: the UI and a CLI run can embed
+    # the same document at the same time, and the loser of that race hit
+    # "duplicate key ... (resume_id, chunk_index)=(7, 0)". Re-embedding the
+    # same text is wasteful but harmless; failing halfway is not.
+    with connection() as conn:
+        cur = conn.cursor()
         cur.execute(
-            f"INSERT INTO {chunk_table} ({id_column}, chunk_index, chunk_text, embedding) "
-            f"VALUES (%s, %s, %s, %s)",
-            (doc_id, index, chunk, _to_pgvector(vector)),
+            f"DELETE FROM {chunk_table} WHERE {id_column} = %s AND chunk_index >= %s",
+            (doc_id, len(chunks)),
         )
-    cur.execute(
-        f"UPDATE {doc_table} SET embedding = %s WHERE {id_column} = %s",
-        (_to_pgvector(doc_vector), doc_id),
-    )
-    conn.commit()
-    cur.close()
-    conn.close()
+        for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            cur.execute(
+                f"INSERT INTO {chunk_table} ({id_column}, chunk_index, chunk_text, embedding) "
+                f"VALUES (%s, %s, %s, %s) "
+                f"ON CONFLICT ({id_column}, chunk_index) DO UPDATE "
+                f"SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding",
+                (doc_id, index, chunk, _to_pgvector(vector)),
+            )
+        cur.execute(
+            f"UPDATE {doc_table} SET embedding = %s WHERE {id_column} = %s",
+            (_to_pgvector(doc_vector), doc_id),
+        )
+        conn.commit()
+        cur.close()
     return len(chunks)
 
 
