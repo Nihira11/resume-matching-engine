@@ -371,12 +371,15 @@ control against two unrelated resumes, are in `validation-results.md`.
   were derived from anything.
 - **ESCO/common-word ambiguity from extraction persists**, though intersection
   mitigates it considerably (see skill overlap above).
-- **Connection churn.** `get_connection()` opens a fresh psycopg2
-  connection per call and the matching engine makes six or seven per
-  match. Fine for one-at-a-time scoring against the Supabase pooler; it
-  will not survive batch leaderboard scoring, which should either thread
-  one connection through a scoring run or move `get_connection()` to a
-  pool.
+- **Round trips, not compute, dominate a match.** Fixed in part:
+  `get_connection()` now hands out pooled connections (`src/utils/db.py`),
+  and `refresh_is_required` batches what was one UPDATE per skill into a
+  single statement. Against the hosted database a match went 39s → ~12s
+  cold, and the UI caches profiles and chunk vectors per session for ~1.5s
+  warm (`run_match(preloaded=…)`). What remains is latency: ~550ms per
+  query even on a warm connection, so a cold match is still ~8 round
+  trips. Batching the per-document reads into single queries is the next
+  step if it matters.
 
 ## Outcome
 

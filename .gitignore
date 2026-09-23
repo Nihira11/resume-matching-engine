@@ -27,3 +27,5 @@ data/taxonomy/*
 venv.nosync/
 # pasted job postings: employer copy, not ours to republish
 data/jds/
+# resumes uploaded through the UI: personal data, stays local
+app/uploaded_files/

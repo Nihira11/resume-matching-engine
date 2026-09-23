@@ -44,9 +44,14 @@ Full detail in `docs/MATCHING-ENGINE.md`; the real-posting run is in `docs/valid
 
 ## UI build (Reflex)
 
-- Multi-page layout: upload resume + paste/fetch JD, score breakdown, matched/missing skills visual, ATS parsability warnings panel
-- Live JD input via Adzuna search, or raw paste as fallback
-- Score explainability: show which keywords/sections drove the score
+- Upload resume or pick a parsed one; paste a posting or pick a stored one
+- Score breakdown per component, with weights and contributions shown
+- Matched/missing skills, gap analysis table, suggestions
+- ATS parsability panel, kept separate from the match score
+- Leaderboard: one resume against every stored posting, filling in as rows land
+- Not wired: Adzuna search (its API truncates descriptions at 500 characters, too little to score against — postings are pasted instead)
+
+Full detail in `docs/UI.md`.
 
 ## Validation against real postings
 
