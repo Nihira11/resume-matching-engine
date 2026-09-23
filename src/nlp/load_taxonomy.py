@@ -32,6 +32,9 @@ SKILLTYPE_TO_CATEGORY = {
 }
 
 
+from src.nlp.taxonomy_cache import clear_cache
+
+
 def load(csv_path: str = CSV_PATH, limit: int | None = None) -> None:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:

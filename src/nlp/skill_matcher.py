@@ -24,7 +24,6 @@ from spacy.matcher import PhraseMatcher
 from spacy.util import filter_spans
 
 from src.nlp.tech_skills import CASE_SENSITIVE_TERMS
-from src.utils.db import get_connection
 
 # Real skill/technology names that are also extremely common English
 # words – case-insensitive matching treats "LESS" (the CSS preprocessor)
@@ -136,13 +135,11 @@ class SkillMatcher:
 
     @staticmethod
     def _fetch_taxonomy():
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT skill_id, skill_name, aliases, source FROM skills_taxonomy")
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return rows
+        # cached locally: the rows are 10MB over the wire and change only
+        # when a loader script runs (see taxonomy_cache.py)
+        from src.nlp.taxonomy_cache import load_taxonomy_rows
+
+        return load_taxonomy_rows()
 
     def _add(self, matcher: PhraseMatcher, term_map: dict[str, tuple[int, str]]) -> None:
         by_skill: dict[tuple[int, str], list[str]] = {}

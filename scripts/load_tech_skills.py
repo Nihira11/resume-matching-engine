@@ -16,6 +16,7 @@ extraction afterwards for anything already in the database:
 from __future__ import annotations
 
 from src.nlp.skill_matcher import CURATED_SOURCE
+from src.nlp.taxonomy_cache import clear_cache
 from src.nlp.tech_skills import TECH_SKILLS
 from src.utils.db import get_connection
 
@@ -52,6 +53,7 @@ def load() -> None:
     cur.close()
     conn.close()
 
+    clear_cache()  # the matcher's local taxonomy copy is now out of date
     print(f"curated skills: {inserted} inserted, {updated} updated, {len(skipped)} skipped")
     for item in skipped:
         print(f"  skipped {item}")

@@ -66,3 +66,13 @@ def test_logistic_regression_is_not_logistics():
 
 def test_open_source_is_not_a_game_engine():
     assert skills_in("Contributions to open-source projects") == set()
+
+
+def test_matcher_only_needs_a_tokenizer():
+    """The pipeline deliberately runs on spacy.blank('en'): a PhraseMatcher
+    needs tokenisation, not tags, parses or NER. This fails if anything in
+    the extraction path starts depending on a trained pipeline."""
+    from src.nlp.extract_entities import get_nlp
+    nlp = get_nlp()
+    assert nlp.pipe_names == []
+    assert "Python" in [s.matched_text for s in SkillMatcher(nlp, rows=ROWS).match(nlp("I use Python"))]

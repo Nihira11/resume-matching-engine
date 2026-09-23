@@ -16,7 +16,7 @@ lookup returns nothing and the rest of the gap analysis is unaffected.
 from __future__ import annotations
 
 import csv
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from src.matching.config import (
     ESCO_RELATIONS_PATH,
     ESCO_SKILLS_PATH,
     MAX_ADJACENT_SUGGESTIONS,
+    MIN_ADJACENCY_CO_OCCURRENCES,
 )
 from src.matching.profiles import JDProfile, ResumeProfile
 from src.matching.skill_overlap import SkillOverlapResult
@@ -83,16 +84,27 @@ def _load_adjacency() -> dict[str, set[str]]:
             if occupation and label:
                 occupation_skills[occupation].add(label)
 
-    adjacency: dict[str, set[str]] = defaultdict(set)
+    # Counted, not just collected. Co-occurring in one occupation means
+    # very little -- it put "3d lighting" and "abap" next to Python --
+    # while co-occurring in several is a real signal: the same ranking by
+    # count puts computer programming, C++, C# and Java at the top.
+    adjacency: dict[str, Counter] = defaultdict(Counter)
     for labels in occupation_skills.values():
         # Occupations with enormous skill lists produce near-universal
         # adjacency and make every suggestion meaningless, so skip them.
         if len(labels) > 80:
             continue
         for label in labels:
-            adjacency[label] |= labels - {label}
+            adjacency[label].update(labels - {label})
 
-    _adjacency = dict(adjacency)
+    _adjacency = {
+        label: {
+            neighbour: count
+            for neighbour, count in counts.items()
+            if count >= MIN_ADJACENCY_CO_OCCURRENCES
+        }
+        for label, counts in adjacency.items()
+    }
     return _adjacency
 
 
@@ -113,16 +125,19 @@ def analyse_gaps(
     gaps: list[SkillGap] = []
     for skill_id in overlap.missing_required + overlap.missing_preferred:
         name = jd.skill_names.get(skill_id, str(skill_id))
-        neighbours = adjacency.get(name.lower(), set())
+        neighbours = adjacency.get(name.lower(), {})
+        # strongest association first, not alphabetical
+        related = sorted(
+            (n for n in neighbours if n in resume_labels),
+            key=lambda n: (-neighbours[n], n),
+        )[:MAX_ADJACENT_SUGGESTIONS]
         gaps.append(
             SkillGap(
                 skill_id=skill_id,
                 skill_name=name,
                 is_required=skill_id in overlap.missing_required,
                 jd_mentions=jd.skill_mentions.get(skill_id, 0),
-                adjacent_skills_you_have=sorted(
-                    neighbours & resume_labels
-                )[:MAX_ADJACENT_SUGGESTIONS],
+                adjacent_skills_you_have=related,
             )
         )
 

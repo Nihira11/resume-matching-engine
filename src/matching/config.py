@@ -183,3 +183,8 @@ VERDICT_BORDERLINE_THRESHOLD = 45.0
 ESCO_RELATIONS_PATH = "data/taxonomy/esco_occupation_skill_relations.csv"
 ESCO_SKILLS_PATH = "data/taxonomy/esco_skills.csv"
 MAX_ADJACENT_SUGGESTIONS = 3  # per missing skill
+# Two skills sharing a single ESCO occupation means little; the raw
+# co-occurrence set linked Python to "3d lighting". Requiring the pair to
+# turn up in at least this many occupations, and ranking by that count,
+# leaves recognisable neighbours (Python -> C++, C#, Java).
+MIN_ADJACENCY_CO_OCCURRENCES = 2

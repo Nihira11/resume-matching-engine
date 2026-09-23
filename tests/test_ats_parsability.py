@@ -38,3 +38,24 @@ def test_two_column_layout_detected():
     result = check_parsability(os.path.join(FIXTURES, "twocol2.pdf"))
     assert result.has_multi_column
     assert result.score < 100.0
+
+def test_ordinary_text_page_is_not_a_table(tmp_path):
+    """Regression: the text strategy treats a whole page of aligned text as
+    one giant grid, so every real resume was flagged and every score was
+    exactly 75/100 -- measured 25 out of 25 on random Kaggle resumes. A
+    table has to be a localised grid."""
+    import fitz  # PyMuPDF, already a dependency
+
+    path = tmp_path / "prose.pdf"
+    doc = fitz.open()
+    page = doc.new_page()
+    y = 72
+    for i in range(30):
+        page.insert_text((72, y), f"Delivered project {i} using Python and SQL for the analytics team")
+        y += 20
+    doc.save(str(path))
+    doc.close()
+
+    result = check_parsability(str(path))
+    assert not result.has_tables
+    assert result.score == 100
