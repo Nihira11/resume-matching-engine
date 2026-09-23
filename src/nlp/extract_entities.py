@@ -55,10 +55,13 @@ DEGREE_PATTERN = re.compile(
 # decimals are captured as part of the number ("6.8 years" -> 6.8). The
 # earlier version only took whole digits, so the \b before the "8" in
 # "6.8" let it match "8 years" and read 6.8 as 8. The lookbehind stops a
-# match starting mid-number for the same reason
+# match starting mid-number for the same reason. "or more" / "or above"
+# is accepted after the first number ("5 or more years") -- it was missed
+# on a real posting, leaving that JD with no years requirement at all
 _YEARS_NUMBER = r"\d{1,2}(?:\.\d{1,2})?"
 YEARS_EXPERIENCE_PATTERN = re.compile(
-    r"(?<![\d.])(" + _YEARS_NUMBER + r")\+?\s*(?:-|to)?\s*(" + _YEARS_NUMBER + r")?\+?\s*years?\b"
+    r"(?<![\d.])(" + _YEARS_NUMBER + r")\+?(?:\s+or\s+(?:more|above))?"
+    r"\s*(?:-|to)?\s*(" + _YEARS_NUMBER + r")?\+?\s*years?\b"
     r"(?:\s+of)?(?:\s+experience)?",
     re.IGNORECASE,
 )

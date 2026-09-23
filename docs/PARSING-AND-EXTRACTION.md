@@ -41,9 +41,13 @@ against synthetic fixture PDFs in `tests/fixtures/`.
 `src/nlp/extract_entities.py`:
 
 - **Skills** – routed through `src/nlp/skill_matcher.py`, which builds a spaCy `PhraseMatcher` from all 13,939 ESCO skill names + aliases loaded during dataset setup. Exact/alias match, case-insensitive, not fuzzy – fuzzy matching against a ~14k-term list produces too many false positives (e.g. "R" matching inside unrelated words). Terms under 3 characters are excluded from matching for the same reason, plus a small stoplist (`AMBIGUOUS_SKILL_TERMS`) for real skill names that are also common English words at 4+ characters – e.g. `"LESS"` (the CSS preprocessor) matching inside `"(Less than 1 year)"` boilerplate, found via validation against the Kaggle NER dataset (see below). Fuzzy/embedding similarity is deferred to the matching-engine phase, where it's meant to be a secondary semantic signal, not a hard skill match.
+  - **Curated tech skills** (`src/nlp/tech_skills.py`, 124 entries, loaded with `python -m scripts.load_tech_skills`) sit alongside ESCO. ESCO has no entry for most of what data and AI postings screen on (Tableau, Power BI, pandas, PyTorch, LLMs, RAG, AWS, Jira) and maps a few to the wrong concept (TensorFlow → "computer vision", and bare "Spark" → ESCO's `SPARK`, which is an Ada programming language). See "Validation against real job postings" below.
+  - **Precedence:** every surface form resolves to exactly one skill – curated term, then ESCO skill name, then ESCO alias. Before this, whichever match the `PhraseMatcher` returned first won.
+  - **Generic single-word ESCO aliases are filtered by shape:** an alias that is one all-lowercase word (`patterns` → dies, `brands` → trademarks, `logistic` → logistics) is dropped; capitalised, mixed-case and multi-word aliases and all ESCO skill names are kept. 518 aliases dropped.
+  - **Case-sensitive terms:** curated names that are also ordinary words (`Excel`, `React`, `Spark`, `Snowflake`, `Confluence`, `RAG`, `VaR` …) are matched by a second `PhraseMatcher` on exact case, so "excel in a team" and "react quickly" don't match.
 - **Titles** – keyword-line heuristic rather than spaCy's built-in NER labels. ESCO occupation labels are too noisy for reliable free-text title extraction. Uses whole-word matching (`\b` boundaries), not plain substring checks – a first version used substring matching and false-positived on `"Directorate"` (matched inside "director") and `"Managerial"` (matched inside "manager").
 - **Education** – regex over common degree abbreviations (`Bachelor`, `B.Sc`, `MBA`, `Associate`, etc.), optionally followed by the field of study. `Associate` is handled more strictly than the other degree words: it's extremely common as a job-title word ("Associate Consultant", "Sales Associate"), so it's only treated as a degree signal when followed by a colon + field of study or the explicit word "degree" – a dash is deliberately not accepted, since "Title - Company" uses dashes just as often as a real degree line would. (This was a real bug caught by validating against the Kaggle NER dataset – see below.)
-- **Years of experience** – regex over numeric range patterns (`3-5 years`, `5+ years experience`), taking the upper bound when a range is given. Decimals are parsed as part of the number (`"6.8 years"` → `6.8`, `"3.2-years"` → `3.2`). An earlier version only matched whole digits, so the word boundary before the `8` in `"6.8"` let it read 6.8 years as `8`. Whole numbers stay integers. Downstream, `profiles._safe_int` floors a stored `"6.8"` to `6`, which is conservative and closer to the truth than the old `8`. Known gap: abbreviated units (`"9 Yrs"`) and months (`"15 Months"`) aren't matched.
+- **Years of experience** – regex over numeric range patterns (`3-5 years`, `5+ years experience`), taking the upper bound when a range is given. Decimals are parsed as part of the number (`"6.8 years"` → `6.8`, `"3.2-years"` → `3.2`). An earlier version only matched whole digits, so the word boundary before the `8` in `"6.8"` let it read 6.8 years as `8`. Whole numbers stay integers. Downstream, `profiles._safe_int` floors a stored `"6.8"` to `6`, which is conservative and closer to the truth than the old `8`. `"5 or more years"` is accepted (missed on a real posting until fixed). Known gap: abbreviated units (`"9 Yrs"`) and months (`"15 Months"`) aren't matched.
 
 ## Storage
 
@@ -65,16 +69,19 @@ Scored by **overlap**, not exact match, since ground-truth spans and our extract
 - **precision** – fraction of our extracted spans that overlap at least one ground-truth span
 - **coverage** – fraction of ground-truth characters captured by any of our spans
 
-Run against the full 220-record dataset:
+Run against the full 220-record dataset. "First run" is the number from when this phase was first written up; "current" is a full re-run after the fixes in "Validation against real job postings" below:
 
-| Label | Our spans | Precision | Coverage |
-|---|---|---|---|
-| Skills | 5,564 | 20.8% | 14.3% |
-| Designation | 632 | 44.6% | 41.7% |
-| Degree | 224 | 47.8% | 40.6% |
-| Years of Experience | – | 77.3% (34/44, ±1 year) | – |
+| Label | First run: spans / precision / coverage | Current: spans / precision / coverage |
+|---|---|---|
+| Skills | 5,564 / 20.8% / 14.3% | 4,849 / 20.8% / 14.0% |
+| Designation | 632 / 44.6% / 41.7% | 673 / 44.0% / 43.8% |
+| Degree | 224 / 47.8% / 40.6% | 168 / 63.7% / 40.6% |
+| Years of Experience | 61.4% (27/44, ±1 year) | 77.3% (34/44, ±1 year) |
 
-Years of Experience was 61.4% (27/44) before decimal parsing was fixed; exact matches went from 21/44 to 33/44. Re-measured with only `extract_years_experience`, which needs no DB. The Skills, Designation and Degree rows are from the last full run and weren't affected by that change.
+- **Skills:** 13% fewer spans (generic-alias filter) at unchanged precision – the dropped matches weren't landing on labelled skill spans either.
+- **Designation:** more spans and higher coverage from the added general-workforce title keywords.
+- **Degree:** the degree pattern wasn't changed between the two runs. The first-run figure most likely predates the `"Associate"` fix below being committed; not claimed as an improvement from later work.
+- **Years:** decimal parsing fixed; exact matches went from 21/44 to 33/44.
 
 **Skills' low number is not a straightforward "our matcher is bad" result.** Ground-truth `Skills` spans mark a specific labeled block (the resume's "SKILLS" section); the ESCO matcher correctly finds skill terms *anywhere* in the document, including inside job descriptions – those are real, correct matches that just fall outside the labeled span, so the overlap metric scores them as false positives. `tests/spot_check_skills.py` prints our extracted terms next to the ground-truth block per resume so this can be checked by eye rather than trusted from the aggregate number alone – a first sample confirmed genuine matches landing outside the labeled block, consistent with this being a metric artifact rather than a real precision problem, though a fuller read across more resumes is worth doing before treating that as settled.
 
@@ -88,14 +95,30 @@ Re-running the spot-check after that fix surfaced the same ambiguity class recur
 
 **Decision: documented as a known limitation, not chased further.** Two ways to actually fix this properly were considered: (a) keep an ever-growing manual stoplist – doesn't scale, since new resumes will keep surfacing new colliding terms; (b) build a systematic common-English-word filter (e.g. exclude any ESCO term that collides with a list of the ~200-300 most common English words) – more systematic, but a blunter instrument that would also suppress genuine matches (someone who really does list "Design" as a skill loses credit for it), and doesn't address matches embedded in prose the way a smarter context-aware disambiguation would (e.g. only trusting single-common-word matches in list/bullet context near a "Skills" heading, versus ordinary sentence prose). Both trade one error type for another rather than solving the root cause. Real disambiguation is matching-engine-scale design work, not a quick patch, so `LESS` stays fixed as a specific, confirmed case, and the general class is left as a documented limitation rather than addressed with a stopgap that wouldn't meaningfully improve accuracy.
 
+**Revisited after scoring real job postings – see below.** On 13 real postings the ambiguity wasn't a tail of occasional misses; it made up a large share of every extracted skill list. That changed the trade-off, and the shape-based alias filter was added.
+
 Also worth noting from the spot-check: `"Email"` shows up as a frequent "false positive," but this is very likely specific to *this dataset* – every record in the Kaggle export has `"Email me on Indeed: indeed.com/r/..."` boilerplate footer text, which real user-uploaded resumes won't have. Left unfixed since it's a test-set artifact, not something that should shape the pipeline for real inputs – worth rechecking if it turns up on actual uploaded resumes later.
 
 **Ground-truth offset drift – confirmed, not just theorized.** One record (Akhil Yadav Polemaina) showed 0% overlap on every label despite the extraction looking reasonable on inspection – every ground-truth `Skills` span in that record came back truncated by **exactly one character** (`"Teradat"` missing the final `a`, `"Mainfram"` missing `e`, `"cobo"` missing `l`, `"serviceno"` missing `w`). That consistent one-character-short pattern across every span in the record, on a resume using heavy unicode bullets (●), confirms the earlier theory: the annotation tool that produced this ground truth recorded **byte** offsets while Python string slicing counts **characters** – multi-byte bullet characters silently drift the two counts apart. This is a data
 artifact specific to unicode-bullet-heavy records in this Kaggle export, not a bug in the extraction pipeline – the low scores on affected records should be read with that in mind rather than taken as a pipeline regression. Not corrected in the validation script itself, since fixing it would mean re-deriving byte-based offsets for this one dataset's quirks rather than improving anything about the pipeline being validated.
 
+## Validation against real job postings
+
+The Kaggle ground truth only covers resumes. The first run against 13 real Sydney data, AI, business-analyst and quant postings (and one real resume) exposed problems that the unit tests and the Kaggle metric couldn't:
+
+1. **ESCO lacks most modern tools.** SQL mapped to "database management systems"; Tableau, Power BI, Excel, pandas, NumPy, scikit-learn, PyTorch, LLMs, RAG, AWS, Azure, Jira, React and Airflow had no entry at all. A skill the matcher can't see never appears as matched *or* missing, so the gap analysis skipped exactly the requirements these roles screen on. Fixed with the curated list.
+2. **Generic aliases dominated the skill lists.** Each of these was an actual match: "patterns" → *dies*, "brands" → *trademarks*, "integrity" → *morality*, "harnesses" → *climbing equipment*, "Reserve" (Bank) → *make reservations*, "CFD" (the trading product) → *computational fluid dynamics*, "open-source" → *Source (digital game creation systems)*, "logistic regression" → *logistics*. Fixed with the alias-shape filter plus `source` and `cfd` in the stoplist. On the validation set, 22 of the 26 matches the filter removed were wrong; the 4 real losses (Git, TensorFlow, two borderline soft-skill matches) are covered by curated terms.
+3. **"5 or more years" wasn't recognised**, so that posting had no years requirement. Fixed on both the resume and JD side (`profiles._JD_YEARS_RE`, which also had the decimal bug).
+
+Stored entities keep whatever extraction produced at ingestion; `python -m scripts.reextract_entities` re-runs extraction over stored text after changes like these.
+
+Residual noise, left as is: a few multi-word ESCO aliases still land on the wrong concept ("job opportunities" → *job market offers*, "architecture standards" → *architecture regulations*, "trading strategies" → *trade sector policies*). Multi-word aliases are right far more often than single words, so they aren't filtered.
+
 ## Testing
 
-`tests/test_extract_entities.py` – regex/heuristic extraction (titles, education, years-of-experience), no DB or spaCy model load required. 19 tests, including decimal years-of-experience and general-workforce title keywords (accountant, assistant, technician, officer, etc.), plus regressions for the two false-positive bugs found while building and validating this phase (`"Directorate"`/`"Managerial"` substring matches, `"Associate"` job-title matches).
+`tests/test_extract_entities.py` – regex/heuristic extraction (titles, education, years-of-experience), no DB or spaCy model load required. 20 tests, including decimal and "or more" years-of-experience and general-workforce title keywords (accountant, assistant, technician, officer, etc.), plus regressions for the two false-positive bugs found while building and validating this phase (`"Directorate"`/`"Managerial"` substring matches, `"Associate"` job-title matches).
+
+`tests/test_skill_matcher.py` – precedence, the alias filter and case-sensitive matching, each case a real mismatch from the job-posting validation. Built from in-memory taxonomy rows and a blank spaCy pipeline, so no DB or model load.
 
 `tests/test_ats_parsability.py` – parsability scoring against synthetic fixture PDFs, generated with `reportlab` specifically to catch the two false-positive/false-negative bugs found during development.
 
@@ -105,5 +128,5 @@ artifact specific to unicode-bullet-heavy records in this Kaggle export, not a b
 
 ## Outcome
 
-Extraction, ATS parsability scoring, NER, ESCO skill matching, DB storage, and validation against external ground truth are all implemented and tested. This phase is functionally complete. Three real bugs were found and fixed via testing against real data rather than assumed correct (`"Directorate"` substring false-positive, `"Associate"` job-title false-positive, `"LESS"` skill/common-word ambiguity). Decimal years-of-experience parsing (`"6.8 years"` read as `8`) was first documented as a limitation and then fixed, raising years-of-experience accuracy from 61.4% to 77.3% (±1 year) and exact matches from 21/44 to 33/44. One thing is documented as a known limitation rather than fixed: common-English-word/ESCO-term ambiguity in the skill matcher (a deliberate decision – see validation section above for why a stopgap wasn't worth applying here). One ground-truth data-quality issue in the Kaggle dataset itself (byte/character
+Extraction, ATS parsability scoring, NER, ESCO skill matching, DB storage, and validation against external ground truth are all implemented and tested. This phase is functionally complete. Three real bugs were found and fixed via testing against real data rather than assumed correct (`"Directorate"` substring false-positive, `"Associate"` job-title false-positive, `"LESS"` skill/common-word ambiguity). Decimal years-of-experience parsing (`"6.8 years"` read as `8`) was first documented as a limitation and then fixed, raising years-of-experience accuracy from 61.4% to 77.3% (±1 year) and exact matches from 21/44 to 33/44. Common-English-word/ESCO-term ambiguity was first left as a known limitation, then addressed with a shape-based alias filter once real job postings showed how much of the extracted skill lists it made up; ESCO's gaps on modern tools are covered by a curated list of 124 skills. One ground-truth data-quality issue in the Kaggle dataset itself (byte/character
 offset drift on unicode-bullet-heavy resumes) was investigated and confirmed, not a pipeline bug. Ready to move to the matching engine. 

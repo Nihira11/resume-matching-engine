@@ -18,6 +18,20 @@ from src.nlp.extract_entities import extract_all
 from src.utils.db import get_connection
 
 
+def build_entity_rows(jd_id: int, entities) -> list[tuple]:
+    """jd_entities rows for one JD, shared with scripts/reextract_entities.py"""
+    rows = []
+    for skill in entities.skills:
+        rows.append((jd_id, "skill", skill.matched_text, skill.skill_id, True))
+    for t in entities.titles:
+        rows.append((jd_id, "title", t, None, True))
+    for edu in entities.education:
+        rows.append((jd_id, "education_requirement", edu, None, True))
+    for years in entities.years_experience:
+        rows.append((jd_id, "min_years_experience", str(years), None, True))
+    return rows
+
+
 def run(
     jd_text: str,
     title: str | None = None,
@@ -42,15 +56,7 @@ def run(
     )
     jd_id = cur.fetchone()[0]
 
-    entity_rows = []
-    for skill in entities.skills:
-        entity_rows.append((jd_id, "skill", skill.matched_text, skill.skill_id, True))
-    for t in entities.titles:
-        entity_rows.append((jd_id, "title", t, None, True))
-    for edu in entities.education:
-        entity_rows.append((jd_id, "education_requirement", edu, None, True))
-    for years in entities.years_experience:
-        entity_rows.append((jd_id, "min_years_experience", str(years), None, True))
+    entity_rows = build_entity_rows(jd_id, entities)
 
     if entity_rows:
         cur.executemany(

@@ -20,6 +20,20 @@ from src.nlp.extract_entities import extract_all
 from src.utils.db import get_connection
 
 
+def build_entity_rows(resume_id: int, entities) -> list[tuple]:
+    """resume_entities rows for one resume, shared with scripts/reextract_entities.py"""
+    rows = []
+    for skill in entities.skills:
+        rows.append((resume_id, "skill", skill.matched_text, skill.skill_id, None))
+    for title in entities.titles:
+        rows.append((resume_id, "title", title, None, None))
+    for edu in entities.education:
+        rows.append((resume_id, "education", edu, None, None))
+    for years in entities.years_experience:
+        rows.append((resume_id, "years_experience", str(years), None, None))
+    return rows
+
+
 def run(file_path: str) -> int:
     if not os.path.exists(file_path):
         sys.exit(f"File not found: {file_path}")
@@ -62,15 +76,7 @@ def run(file_path: str) -> int:
     )
     resume_id = cur.fetchone()[0]
 
-    entity_rows = []
-    for skill in entities.skills:
-        entity_rows.append((resume_id, "skill", skill.matched_text, skill.skill_id, None))
-    for title in entities.titles:
-        entity_rows.append((resume_id, "title", title, None, None))
-    for edu in entities.education:
-        entity_rows.append((resume_id, "education", edu, None, None))
-    for years in entities.years_experience:
-        entity_rows.append((resume_id, "years_experience", str(years), None, None))
+    entity_rows = build_entity_rows(resume_id, entities)
 
     if entity_rows:
         cur.executemany(
