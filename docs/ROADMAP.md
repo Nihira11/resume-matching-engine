@@ -25,7 +25,7 @@ Full detail in `docs/REPO-AND-DATA-SETUP.md`.
 - ATS parsability scoring: detect tables, multi-column layout, images, headers/footers – flag formatting that causes real ATS engines to drop or scramble content, independent of what the resume says
 - spaCy NER: extract skills, job titles, education, years of experience
 - Skill matching against the ESCO taxonomy (including alias matching)
-- Validated against the Kaggle labelled entity dataset – found and fixed four real extraction bugs, documented one known limitation
+- Validated against the Kaggle labelled entity dataset, then against 13 real job postings – six extraction bugs found and fixed between them, including ESCO's gaps on modern tooling (covered by a curated 124-skill list) and generic-alias false positives
 - Store structured extraction results in Postgres
 
 Full detail in `docs/PARSING-AND-EXTRACTION.md`.
@@ -38,6 +38,9 @@ Full detail in `docs/PARSING-AND-EXTRACTION.md`.
 - Semantic similarity via sentence-transformers embeddings, stored via pgvector – secondary signal, not primary
 - Blended final score with a transparent breakdown (never a black-box number)
 - Gap analysis: skills present in the JD but missing from the resume
+- Run end-to-end against real postings – three engine bugs found and fixed that every unit test missed (title zeroed for resumes with no title line, BM25 querying employer boilerplate, resumes embedded as one truncated chunk)
+
+Full detail in `docs/MATCHING-ENGINE.md`; the real-posting run is in `docs/validation-results.md`.
 
 ## UI build (Reflex)
 
@@ -47,10 +50,10 @@ Full detail in `docs/PARSING-AND-EXTRACTION.md`.
 
 ## Validation against real postings
 
-- Run the tool against real job postings applied to personally, not just Kaggle bulk data
-- Sanity-check: does the tool's verdict match actual intuition about fit
-- Calibrate scoring weights based on this validation
-- Document results in `docs/validation-results.md` – the credibility piece for the README ("validated against N real postings," not "tested on synthetic data")
+- Run the tool against real job postings applied to personally, not just Kaggle bulk data — first pass done: 13 real Sydney postings, written up in `docs/validation-results.md`
+- Sanity-check: does the tool's verdict match actual intuition about fit — ordering does; the verdicts don't, every posting still lands below the borderline threshold
+- Calibrate scoring weights and verdict thresholds against this distribution, extended with more postings including deliberate mismatches as negative controls
+- Measure the semantic rescale bounds from the observed similarity distribution instead of the current estimate
 
 ## Polish & deployment
 

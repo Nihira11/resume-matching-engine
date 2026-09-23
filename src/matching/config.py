@@ -104,6 +104,13 @@ EXPERIENCE_SHORTFALL_EXPONENT = 1.5
 # Gap analysis raises it as a suggestion instead of the score punishing it.
 NO_YEARS_ON_RESUME_SCORE = 0.5
 
+# Same reasoning for titles. Student and early-career resumes often have no
+# job-title line at all (projects and coursework instead), and extract_titles
+# returns nothing. Scoring that as a 0 title match zeroed 15% of every score
+# for exactly the people most likely to use the tool; neutral plus a
+# gap-analysis suggestion matches how missing years are handled.
+NO_TITLE_ON_RESUME_SCORE = 0.5
+
 # ---------------------------------------------------------------------
 # BM25
 # ---------------------------------------------------------------------
@@ -111,7 +118,41 @@ BM25_K1 = 1.5
 BM25_B = 0.75
 BM25_CORPUS_STATS_PATH = "data/processed/bm25_corpus_stats.json"
 BM25_MIN_TOKEN_LEN = 3
-BM25_MAX_QUERY_TERMS = 120  # highest-IDF terms only; the tail is noise
+BM25_MAX_QUERY_TERMS = 60
+# Query terms must appear in at least this many corpus resumes. A term no
+# resume uses (company names, "work180", "udemy") gets the maximum IDF, so
+# ranking by IDF alone filled the query with words no candidate could
+# match -- and pushed out "sql" and "forecasting" on a data analyst JD.
+BM25_MIN_QUERY_DF = 5
+
+# ---------------------------------------------------------------------
+# JD boilerplate
+# ---------------------------------------------------------------------
+# Benefits, "about us", privacy and EEO sections describe the employer,
+# not the job. Left in, they dominate the BM25 query (rare words like
+# "carers" and "parental" out-rank "sql") and drag the semantic score down
+# (every benefits chunk is a JD chunk no resume covers). A heading that
+# contains one of these switches to boilerplate until a content heading
+# switches back.
+JD_BOILERPLATE_HEADING_MARKERS = (
+    "benefit", "perks", "why work", "why join", "why us", "what we offer",
+    "what's in it", "in it for you", "about us", "about the company",
+    "privacy", "accommodation", "how to apply", "rewards", "equal opportunit",
+    "diversity", "inclusion", "employment type", "time type",
+)
+JD_CONTENT_HEADING_MARKERS = (
+    "responsibilit", "requirement", "what you'll", "what you will", "you will",
+    "you have", "you are", "bring", "skills", "experience", "the role",
+    "looking for", "essentials", "day to day", "qualification", "about you",
+    "competenc", "opportunity", "role purpose", "what you", "who are you",
+    "success looks", "mission", "doing",
+)
+# EEO and privacy sentences often sit under no heading at all
+JD_BOILERPLATE_LINE_PATTERN = (
+    r"equal opportunit|regardless of|diverse backgrounds|underrepresented|"
+    r"hiring decisions are never|reasonable accommodation|privacy policy|"
+    r"agency submissions|committed to (?:fostering|equity|making the recruitment)"
+)
 
 # ---------------------------------------------------------------------
 # Semantic

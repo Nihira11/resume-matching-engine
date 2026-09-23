@@ -305,3 +305,114 @@ class TestJDMinYears:
 
     def test_no_years_returns_none(self):
         assert extract_jd_min_years("Great team, flexible hours.") is None
+
+# ---------------------------------------------------------------------
+# Regressions found by scoring a real resume against 13 real postings.
+# Every one of these passed the ordering tests above and still made the
+# engine return "likely_reject" for every posting.
+# ---------------------------------------------------------------------
+class TestTitleWithNoResumeTitles:
+    def test_no_resume_titles_is_neutral_not_zero(self):
+        # student resumes often have no job-title line; that was scored
+        # as a 0 title match and zeroed 15% of every score
+        jd = make_jd([], title="Associate Data Scientist")
+        result = score_title_match(make_resume([], titles=[]), jd)
+        assert result.resume_states_no_title
+        mismatch = score_title_match(make_resume([], titles=["Chef"]), jd).score
+        match = score_title_match(make_resume([], titles=["Data Scientist"]), jd).score
+        assert mismatch < result.score < match
+
+    def test_gap_analysis_suggests_adding_a_title(self):
+        from src.matching.gap_analysis import analyse_gaps
+        resume, jd = make_resume([PYTHON]), make_jd([PYTHON])
+        overlap = score_skill_overlap(resume, jd)
+        gaps = analyse_gaps(resume, jd, overlap, resume_states_no_title=True)
+        assert any("title" in s.lower() for s in gaps.suggestions)
+
+
+class TestBM25RealPostings:
+    def scorer(self):
+        return BM25Scorer(
+            n_docs=1000,
+            avgdl=300.0,
+            df={"sql": 300, "forecasting": 200, "insights": 400,
+                "parental": 6, "carers": 5, "iress": 0},
+        )
+
+    def test_tokenizer_strips_sentence_final_punctuation(self):
+        tokens = tokenize("Deliver insights. Use Node.js and scikit-learn.")
+        assert "insights" in tokens and "insights." not in tokens
+        assert "node.js" in tokens and "scikit-learn" in tokens
+
+    def test_benefits_section_excluded_from_query(self):
+        jd = (
+            "Data Analyst\n"
+            "What You Will Bring\n"
+            "SQL and forecasting experience.\n"
+            "Why work with us?\n"
+            "Paid parental leave for carers.\n"
+        )
+        query = self.scorer().build_query(jd)
+        assert "sql" in query and "forecasting" in query
+        assert "parental" not in query and "carers" not in query
+
+    def test_terms_no_resume_uses_are_excluded(self):
+        # df=0 gives the maximum IDF, so employer names used to top the query
+        query = self.scorer().build_query("Iress needs SQL and forecasting.")
+        assert "iress" not in query
+        assert "sql" in query
+
+
+class TestJDBoilerplate:
+    def test_strips_benefits_about_and_eeo(self):
+        from src.matching.jd_sections import strip_boilerplate
+        jd = (
+            "Associate Data Scientist\n"
+            "You have:\n"
+            "Experience with SQL and Python.\n"
+            "About Mistral\n"
+            "We build frontier models.\n"
+            "What You Will Do\n"
+            "Deploy models.\n"
+            "Perks & Benefits\n"
+            "Equity and a MacBook.\n"
+            "We are an equal opportunities employer.\n"
+        )
+        kept = strip_boilerplate(jd)
+        assert "SQL and Python" in kept and "Deploy models" in kept
+        assert "frontier" not in kept and "MacBook" not in kept
+        assert "equal opportunities" not in kept
+
+    def test_about_the_role_is_content(self):
+        from src.matching.jd_sections import heading_kind
+        assert heading_kind("About The Role") == "content"
+        assert heading_kind("About you:") == "content"
+        assert heading_kind("About GloBird Energy") == "boilerplate"
+        assert heading_kind("Why RBA?") == "boilerplate"
+
+    def test_all_boilerplate_falls_back_to_original(self):
+        from src.matching.jd_sections import strip_boilerplate
+        jd = "Benefits\nFree lunch."
+        assert strip_boilerplate(jd) == jd
+
+
+class TestChunking:
+    def test_pdf_text_without_blank_lines_is_split(self):
+        # PDF extraction gives no blank lines; the whole resume became one
+        # chunk and MiniLM only read its first 256 tokens
+        from src.matching.config import CHUNK_TARGET_CHARS
+        from src.matching.embeddings import chunk_text
+        lines = [f"Project {i}: built an XGBoost model on {i * 1000} rows of data" for i in range(60)]
+        chunks = chunk_text("\n".join(lines))
+        assert len(chunks) > 1
+        assert all(len(c) <= CHUNK_TARGET_CHARS for c in chunks)
+        assert "Project 59" in chunks[-1]
+
+
+class TestJDMinYearsRealPostings:
+    def test_or_more(self):
+        assert extract_jd_min_years("5 or more years of experience with requirements") == 5
+
+    def test_decimal_not_misread(self):
+        # the "8" in "6.8" used to match on its own
+        assert extract_jd_min_years("6.8 years of experience") != 8

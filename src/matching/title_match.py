@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from src.matching.config import (
     DEFAULT_SENIORITY_LEVEL,
+    NO_TITLE_ON_RESUME_SCORE,
     OVERQUALIFIED_PENALTY_PER_STEP,
     SENIORITY_LADDER,
     TITLE_FAMILY_WEIGHT,
@@ -36,6 +37,7 @@ class TitleMatchResult:
     jd_level: int | None = None
     resume_level: int | None = None
     best_matching_title: str | None = None
+    resume_states_no_title: bool = False
 
 
 def normalize_title(title: str) -> set[str]:
@@ -70,6 +72,14 @@ def score_title_match(resume: ResumeProfile, jd: JDProfile) -> TitleMatchResult:
     jd_tokens = normalize_title(jd.title)
     if not jd_tokens:
         return TitleMatchResult(score=None)
+
+    if not any(normalize_title(t) for t in resume.titles):
+        # neutral, not zero -- see NO_TITLE_ON_RESUME_SCORE in config.py
+        return TitleMatchResult(
+            score=NO_TITLE_ON_RESUME_SCORE,
+            resume_level=DEFAULT_SENIORITY_LEVEL,
+            resume_states_no_title=True,
+        )
 
     # family
     # Asymmetric containment, not Jaccard. extract_titles keeps

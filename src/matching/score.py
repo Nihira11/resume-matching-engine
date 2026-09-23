@@ -112,6 +112,7 @@ def build_match_score(
             "jd_level": title.jd_level,
             "resume_level": title.resume_level,
             "best_matching_title": title.best_matching_title,
+            "resume_states_no_title": title.resume_states_no_title,
         },
         "experience": asdict(experience),
         "semantic": {

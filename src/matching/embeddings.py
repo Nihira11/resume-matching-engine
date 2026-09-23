@@ -24,6 +24,7 @@ from src.matching.config import (
     CHUNK_TARGET_CHARS,
     EMBEDDING_MODEL,
 )
+from src.matching.jd_sections import strip_boilerplate
 from src.utils.db import get_connection
 
 _model = None
@@ -48,11 +49,25 @@ def chunk_text(text: str) -> list[str]:
     Short trailing fragments are merged forward rather than kept: a
     12-character chunk containing just a section heading embeds to
     something meaningless and pollutes the max-pool.
+
+    A paragraph longer than CHUNK_TARGET_CHARS is broken at line breaks
+    first. PDF extraction usually yields no blank lines at all, so without
+    this a whole resume became one chunk -- and MiniLM truncates at 256
+    tokens, so only the name, contact line and education were embedded.
     """
     if not text or not text.strip():
         return []
 
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    paragraphs: list[str] = []
+    for para in re.split(r"\n\s*\n", text):
+        para = para.strip()
+        if not para:
+            continue
+        if len(para) <= CHUNK_TARGET_CHARS:
+            paragraphs.append(para)
+        else:
+            paragraphs.extend(line.strip() for line in para.splitlines() if line.strip())
+
     chunks: list[str] = []
     buffer = ""
 
@@ -96,6 +111,10 @@ def embed_and_store(kind: str, doc_id: int, text: str) -> int:
     if kind not in ("resume", "jd"):
         raise ValueError("kind must be 'resume' or 'jd'")
 
+    if kind == "jd":
+        # semantic pooling asks "is every JD chunk covered by the resume?",
+        # and a benefits or EEO chunk never is -- see jd_sections.py
+        text = strip_boilerplate(text)
     chunks = chunk_text(text)
     if not chunks:
         return 0

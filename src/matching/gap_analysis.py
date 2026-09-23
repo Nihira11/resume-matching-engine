@@ -101,6 +101,7 @@ def analyse_gaps(
     jd: JDProfile,
     overlap: SkillOverlapResult,
     resume_states_no_years: bool = False,
+    resume_states_no_title: bool = False,
 ) -> GapAnalysisResult:
     resume_labels = {name.lower() for name in resume.skill_names.values()}
     adjacency = _load_adjacency()
@@ -138,6 +139,13 @@ def analyse_gaps(
             "This posting states a minimum years-of-experience requirement, but "
             "the resume never states a total. Adding an explicit figure to the "
             "summary line gives a keyword screen something to match."
+        )
+    if resume_states_no_title:
+        suggestions.append(
+            "No job-title line was found on the resume, so the title match is "
+            "scored neutral. A headline such as \"Data Science Student\" or a "
+            "role title on each position gives an ATS title filter something "
+            "to match against this posting's title."
         )
     top_required = [g for g in gaps if g.is_required][:5]
     if top_required:

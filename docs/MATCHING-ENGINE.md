@@ -1,7 +1,10 @@
 # Matching Engine
 
-Status: implemented, not yet calibrated. Calibration comes later, against
-real job postings.
+Status: implemented and run end-to-end against real postings; not yet
+calibrated. The first real run found five bugs that every unit test
+missed — three of them in this engine, written up in
+`validation-results.md` and summarised in "Fixes from the first real run"
+below. Weights and verdict thresholds are still uncalibrated.
 
 ## Shape
 
@@ -86,12 +89,36 @@ divided by the score of a reference document containing each query term
 once at average length (which works out to exactly the sum of query IDFs)
 and clipped to [0, 1].
 
-**Known:** absolute values read low. Out-of-vocabulary JD terms get
-maximum IDF and inflate the reference denominator even when they're
-boilerplate. This is correct behaviour for genuinely rare technical terms
-and slightly unfair for unusual filler. Rank ordering is unaffected;
-Calibration should consider percentile scoring against the corpus rather
-than treating the absolute number as meaningful.
+**Query terms are chosen, not just ranked.** The first version took the
+120 highest-IDF terms in the JD. Against real postings that selected
+almost entirely for employer boilerplate — the Iress query was
+`essential.`, `uniqueness`, `recognised`, `www.iress.com`, `work180`,
+`carers`, `parental` — while `sql`, `forecasting` and `statistical` didn't
+make the cut. Rare in a resume corpus and *distinctive about the job* are
+not the same property, and IDF only measures the first. Three changes:
+
+- Boilerplate sections are stripped before the query is built
+  (`jd_sections.py`): benefits, "about us", privacy, EEO. Postings are
+  often half employer copy, and none of it says anything about fit.
+- Terms appearing in fewer than `BM25_MIN_QUERY_DF` (5) corpus resumes are
+  skipped. A term no resume uses gets maximum IDF but can never be
+  matched, so it only inflated the reference denominator — employer names
+  and URLs topped the query this way.
+- Ranking is IDF with a log boost for terms the JD repeats, capped at 60
+  terms. Repetition is how a posting signals what it cares about.
+
+Also in the tokenizer: `.` and `-` are allowed inside tokens so
+`node.js` and `scikit-learn` survive, but a sentence-final full stop was
+being kept too, so `insights.` and `insights` were different terms and the
+punctuated one looked rare. Changing the tokenizer changes the corpus
+statistics, so `scripts/build_bm25_corpus.py` has to be re-run after
+touching it (vocabulary dropped 56,128 → 47,928 once the punctuated
+duplicates merged).
+
+**Known:** absolute values still read low, since a resume never contains
+every query term. Rank ordering is unaffected. Calibration should consider
+percentile scoring against the corpus rather than treating the absolute
+number as meaningful.
 
 ### Title / seniority
 
@@ -120,6 +147,14 @@ Penalties are asymmetric: 0.30 per rung underqualified, 0.08 per rung
 over. Being a rung below the advertised level is the failure mode a screen
 exists to catch; a rung above is a mild mismatch that often still gets a
 call.
+
+**A resume with no title line at all scores neutral, not zero**
+(`NO_TITLE_ON_RESUME_SCORE`), plus a gap-analysis suggestion — the same
+treatment missing years already got. Student and early-career resumes are
+projects and coursework with no job-title line anywhere, so
+`extract_titles` returns nothing and the component was scoring 0, zeroing
+15% of every score for exactly the people most likely to use the tool.
+Found on the first real resume scored.
 
 ### Experience
 
@@ -165,6 +200,18 @@ noise, not signal. Chunks are packed to ~600 characters on blank-line
 boundaries, which works because the ingestion `clean_text()` deliberately
 preserves line structure, so section boundaries come for free without a
 heading classifier.
+
+**Blank lines alone weren't enough.** PDF extraction frequently produces
+no blank lines at all, and the fallback was a single chunk holding the
+whole document — MiniLM truncates at 256 tokens, so on the first real
+resume only the name, contact line and education were ever embedded, and
+7 of 13 postings scored 0.0 semantic. Paragraphs longer than the target
+are now split at line breaks before packing.
+
+JD text is passed through `jd_sections.strip_boilerplate` before
+embedding, for a reason specific to the pooling direction: every JD chunk
+must be covered by some resume chunk, and a benefits or EEO chunk never
+is, so boilerplate dragged every candidate down equally.
 
 Pooling is asymmetric: for each JD chunk take the best-matching resume
 chunk, then average across JD chunks. That asks "is everything this job
@@ -278,6 +325,26 @@ seniority signal; IDF never goes negative; missing components renormalise
 rather than zero; a long extracted title line isn't penalised against a
 clean one; semantic pooling is JD-directed.
 
+## Fixes from the first real run
+
+Scoring one real resume against 13 real postings returned `likely_reject`
+for all 13, including a graduate AI role that fits well. Three engine bugs
+were responsible (the other two were extraction; see
+`PARSING-AND-EXTRACTION.md`):
+
+1. **Title scored 0 for a resume with no title line** → neutral +
+   suggestion.
+2. **BM25 query was employer boilerplate** → boilerplate stripping,
+   minimum corpus document frequency, repetition-weighted ranking,
+   tokenizer punctuation fix.
+3. **Resumes embedded as one truncated chunk** → line-level splitting;
+   JD boilerplate stripped before embedding.
+
+Top score moved 15.8 → 40.7, the ordering became defensible (data roles
+above AI engineering above 5-years-experience BA roles), and semantic
+stopped returning 0.0. Full before/after tables, including a negative
+control against two unrelated resumes, are in `validation-results.md`.
+
 ## Known limitations
 
 - **Title seniority is generous when the resume has no detectable level.**
@@ -288,6 +355,15 @@ clean one; semantic pooling is JD-directed.
   at now.
 - **BM25 absolute values read low** – see above. Ordering is sound;
   the number isn't meaningful on its own yet.
+- **Every real posting scored so far lands below the borderline
+  threshold.** 13 postings, best score 40.7 against a 45 borderline / 70
+  pass threshold. The thresholds were set before any real data existed and
+  this run is the first evidence they're wrong; calibrating them needs
+  more postings, including deliberate mismatches as negative controls.
+- **Boilerplate detection is heading-driven**, so a posting with no
+  headings keeps its benefits and EEO text in both the BM25 query and the
+  embedded chunks. `strip_boilerplate` falls back to the full text rather
+  than returning nothing.
 - **Semantic rescale bounds are estimated, not measured.** The single
   biggest source of miscalibration in the current blend.
 - **All weights are reasoned, not evidenced.** That is the entire point of
@@ -306,6 +382,8 @@ clean one; semantic pooling is JD-directed.
 
 Five-component blend with transparent per-component breakdown, gap
 analysis with ESCO-based adjacency suggestions, required-vs-preferred
-backfill, chunked embeddings via pgvector, and 30 ordering-based
-regression tests. Weights are provisional by design. Ready for the Reflex
-UI, which reads `score_breakdown` and needs no recomputation.
+backfill, chunked embeddings via pgvector, and ordering-based regression
+tests — now including one per bug from the first real run. Weights and
+thresholds are provisional by design and are the next thing to calibrate.
+Ready for the Reflex UI, which reads `score_breakdown` and needs no
+recomputation.

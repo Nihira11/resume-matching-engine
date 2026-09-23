@@ -120,3 +120,9 @@ def test_extract_titles_general_workforce_no_substring_false_positive():
     # whole-word matching still applies to the added keywords
     text = "Assisted the audit team.\nSupervised weekend shifts.\nAdvisory board member."
     assert extract_titles(text) == []
+
+
+def test_extract_years_experience_or_more():
+    # missed on a real posting ("5 or more years of experience")
+    text = "an experienced Business Analyst with 5 or more years of experience"
+    assert extract_years_experience(text) == [5]

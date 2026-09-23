@@ -62,7 +62,7 @@ class JDProfile:
 # it was designed for; this is a JD-specific reading of the same text, not
 # a bug fix to the extractor.
 _JD_YEARS_RE = re.compile(
-    r"\b(\d{1,2})\s*(?:\+|-|–|–|to)?\s*(?:\d{1,2})?\s*\+?\s*years?\b",
+    r"(?<![\d.])(\d{1,2})(?!\.\d)\s*(?:\+|-|–|–|to|or more|or above)?\s*(?:\d{1,2})?\s*\+?\s*years?\b",
     re.IGNORECASE,
 )
 _MINIMUM_CUES = (

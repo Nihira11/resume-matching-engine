@@ -79,6 +79,7 @@ def run_match(
     gaps = analyse_gaps(
         resume, jd, overlap,
         resume_states_no_years=experience.resume_states_no_years,
+        resume_states_no_title=title.resume_states_no_title,
     )
 
     match = build_match_score(

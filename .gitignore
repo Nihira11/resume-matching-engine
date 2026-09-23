@@ -25,3 +25,5 @@ data/taxonomy/*
 .ipynb_checkpoints/
 *.log
 venv.nosync/
+# pasted job postings: employer copy, not ours to republish
+data/jds/

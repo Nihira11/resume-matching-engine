@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -41,8 +42,10 @@ from src.matching.config import (
     BM25_CORPUS_STATS_PATH,
     BM25_K1,
     BM25_MAX_QUERY_TERMS,
+    BM25_MIN_QUERY_DF,
     BM25_MIN_TOKEN_LEN,
 )
+from src.matching.jd_sections import strip_boilerplate
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9+#.\-]*")
 
@@ -58,8 +61,13 @@ across over under more most other than then them these those may might
 
 
 def tokenize(text: str) -> list[str]:
+    # "." and "-" are allowed inside a token for node.js / scikit-learn, but
+    # a sentence-final full stop was being kept too, so "insights." and
+    # "insights" counted as different terms and the punctuated one looked
+    # rare
+    tokens = (t.rstrip(".-") for t in _TOKEN_RE.findall((text or "").lower()))
     return [
-        t for t in _TOKEN_RE.findall((text or "").lower())
+        t for t in tokens
         if len(t) >= BM25_MIN_TOKEN_LEN and t not in _STOPWORDS
     ]
 
@@ -97,14 +105,26 @@ class BM25Scorer:
         return max(raw, 0.01)
 
     def build_query(self, jd_text: str) -> list[str]:
-        """Highest-IDF unique terms from the JD, capped.
+        """Most distinctive JD terms, capped.
+
+        Boilerplate sections are removed first, and terms fewer than
+        BM25_MIN_QUERY_DF corpus resumes use are skipped -- see config.py
+        for why ranking on IDF alone picked employer names and benefits
+        vocabulary over the actual requirements. Ranked by IDF with a
+        log boost for terms the JD repeats, since repetition is how a
+        posting signals what it cares about.
 
         The cap matters: a long JD contributes a couple of hundred
         low-IDF filler terms whose combined weight starts to drown the
         handful of terms that actually distinguish candidates.
         """
-        unique = set(tokenize(jd_text))
-        ranked = sorted(unique, key=self.idf, reverse=True)
+        counts = Counter(tokenize(strip_boilerplate(jd_text)))
+        candidates = [t for t in counts if self.df.get(t, 0) >= BM25_MIN_QUERY_DF]
+        ranked = sorted(
+            candidates,
+            key=lambda t: self.idf(t) * (1 + math.log(counts[t])),
+            reverse=True,
+        )
         return ranked[:BM25_MAX_QUERY_TERMS]
 
     def score(self, doc_text: str, jd_text: str) -> BM25Result:
