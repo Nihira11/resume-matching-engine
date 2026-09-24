@@ -14,16 +14,49 @@ DOCX extraction walks table cells in addition to paragraphs – resume templates
 
 `src/ingestion/ats_parsability.py` – standalone from content extraction, by design: a resume can have perfect keyword coverage and still fail a real ATS because of how it's formatted.
 
-Checks four things, each independently deducted from a 100-point score:
+Checks four things. Each deduction scales with how much of the document
+the issue affects, so the score is continuous rather than landing on one
+of thirteen fixed values:
 
-| Issue | Deduction | Detection |
-|---|---|---|
-| Tables | -25 | pdfplumber `find_tables()` with the **text** strategy, not the default line strategy |
-| Multi-column | -20 | custom gutter-detection heuristic (below) |
-| Images | -10 | `page.images` (PDF) / `doc.inline_shapes` (DOCX) |
-| Headers/footers | -15 | repeated text in the top/bottom 8% margin across pages (PDF) / `section.header`/`section.footer` (DOCX) |
+| Issue | Full deduction | Severity | Detection |
+|---|---|---|---|
+| Tables | −25 | fraction of pages containing one | ruled lines, or a localised text-aligned grid |
+| Multi-column | −20 | fraction of pages affected | gutter-detection heuristic (below) |
+| Headers/footers | −15 | always 1.0 — a running header is on every page | repeated line in the top/bottom 8% margin |
+| Images | −10 | count, full at 3+ | `page.images` (PDF) / `doc.inline_shapes` (DOCX) |
 
-Flags dedupe per issue type (a 5-page resume with a table on every page produces one "detected table" message, not five) – an early version produced one message per page, which was confusing and inflated the apparent severity of the flag list without changing the score.
+Any occurrence costs at least half its deduction: one mangled section can
+be the one holding your experience. A table on one page of four scores
+88; tables on all four score 75.
+
+**Three false-positive classes were found by testing against real
+resumes, and each is now excluded.**
+
+1. **The whole page is not a table.** pdfplumber's text strategy infers
+   structure from whitespace alignment, and on an ordinary resume every
+   line becomes a row. Measured on 25 random real resumes, the original
+   "any 2×2 grid" rule fired on 25 of 25 — every resume scored exactly
+   75, and the check carried no information. Now a table must be a
+   *localised* grid: at most 35% of page height, ≥3 rows, ≥2 columns.
+
+2. **Columns that cut through words are not columns.** A resume flagged
+   at 75 turned out to have no table at all: the inferred boundaries ran
+   straight through its project bullets — `Resu|me Matching`, `In
+   Progr|ess`, `Pyth|on`. Real tables never split a word. Grids where
+   more than 5% of words are sliced by a column edge are now rejected;
+   on the validation set the two groups did not overlap (rejected grids
+   sliced 8.6–37.3% of words, genuine tables 3.4–3.7%).
+
+3. **A running header plus a heading is still a running header.** The
+   header check compared the whole top band as one string, so a page
+   reading "…Curriculum Vitae JORDAN BLAKE" and another reading
+   "…Curriculum Vitae CERTIFICATIONS" looked different and the check
+   never fired. It now compares line by line and strips digits, so
+   "Page 1 of 3" matches "Page 2 of 3".
+
+After all three, a fresh sample of 40 real resumes scores 34 clean, 4 at
+85, 2 at 88 — the check finally distinguishes documents instead of
+flagging everything.
 
 Two detection issues needed real iteration to get right, caught by building synthetic test PDFs rather than trusting the first pass:
 

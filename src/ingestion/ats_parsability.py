@@ -16,6 +16,7 @@ postings/outcomes
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 
 import pdfplumber
@@ -29,6 +30,20 @@ DEDUCTIONS = {
 }
 
 
+# How much of the document each issue affects, rather than merely whether
+# it occurs. A skills table on one page of three is a smaller problem than
+# tables on every page, and the old fixed deductions could not say so:
+# the score could only ever take 13 values (100, 90, 85, 80, 75 ...), so
+# two very different documents scored identically.
+#
+# Severity is the affected fraction, floored: any occurrence still costs
+# at least half the deduction, because one mangled section can be the one
+# holding your experience.
+MIN_SEVERITY = 0.5
+# images are counted, not paged: this many or more is "throughout"
+IMAGES_FOR_FULL_SEVERITY = 3
+
+
 @dataclass
 class ParsabilityResult:
     has_tables: bool = False
@@ -37,6 +52,8 @@ class ParsabilityResult:
     has_headers_footers: bool = False
     score: float = 100.0
     flags: list = field(default_factory=list)
+    # severity in [0, 1] per issue; absent means the issue did not occur
+    severities: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -49,17 +66,22 @@ class ParsabilityResult:
         }
 
 
+def _severity(affected: float, total: float) -> float:
+    """Affected fraction, floored at MIN_SEVERITY. 0 when nothing hit."""
+    if affected <= 0 or total <= 0:
+        return 0.0
+    return max(MIN_SEVERITY, min(1.0, affected / total))
+
+
 def _score_from_flags(result: ParsabilityResult) -> None:
     score = 100.0
-    if result.has_tables:
-        score -= DEDUCTIONS["tables"]
-    if result.has_multi_column:
-        score -= DEDUCTIONS["multi_column"]
-    if result.has_images:
-        score -= DEDUCTIONS["images"]
-    if result.has_headers_footers:
-        score -= DEDUCTIONS["headers_footers"]
-    result.score = max(0.0, score)
+    for issue, deduction in DEDUCTIONS.items():
+        severity = result.severities.get(issue, 0.0)
+        if severity:
+            score -= deduction * severity
+    # a whole number: the inputs are page counts and detector thresholds,
+    # and decimal places would imply precision the measurement lacks
+    result.score = float(max(0.0, round(score)))
 
 
 # PDF
@@ -77,8 +99,12 @@ def check_pdf(path: str) -> ParsabilityResult:
             result.flags.append(message)
 
     with pdfplumber.open(path) as pdf:
+        pages_with_tables = pages_multi_column = 0
+        image_count = 0
+
         for page in pdf.pages:
             if _has_table(page):
+                pages_with_tables += 1
                 result.has_tables = True
                 add_flag(
                     "tables",
@@ -87,6 +113,7 @@ def check_pdf(path: str) -> ParsabilityResult:
                 )
 
             if page.images:
+                image_count += len(page.images)
                 result.has_images = True
                 add_flag(
                     "images",
@@ -96,6 +123,7 @@ def check_pdf(path: str) -> ParsabilityResult:
 
             words = page.extract_words()
             if _looks_multi_column(words, page.width):
+                pages_multi_column += 1
                 result.has_multi_column = True
                 add_flag(
                     "multi_column",
@@ -104,7 +132,16 @@ def check_pdf(path: str) -> ParsabilityResult:
                     "content out of order.",
                 )
 
+        page_count = max(1, len(pdf.pages))
+        result.severities["tables"] = _severity(pages_with_tables, page_count)
+        result.severities["multi_column"] = _severity(pages_multi_column, page_count)
+        result.severities["images"] = _severity(
+            min(image_count, IMAGES_FOR_FULL_SEVERITY), IMAGES_FOR_FULL_SEVERITY
+        )
+
         if _has_repeated_margin_text(pdf.pages):
+            # a running header sits on every page by definition
+            result.severities["headers_footers"] = 1.0
             result.has_headers_footers = True
             add_flag(
                 "headers_footers",
@@ -128,6 +165,13 @@ def check_pdf(path: str) -> ParsabilityResult:
 # table fixture while leaving the plain one clean.
 MAX_TABLE_HEIGHT_FRACTION = 0.35
 MIN_TABLE_ROWS = 3
+# A real table's column boundaries fall between words. Whitespace that
+# merely lines up across wrapped prose does not: on a resume whose
+# project bullets were flagged, the inferred columns cut straight through
+# words -- "Resu|me Matching", "In Progr|ess", "Pyth|on" -- and 29% of the
+# words in the block were sliced by an edge, against 0% for a genuine
+# table. Anything above this is alignment coincidence, not structure.
+MAX_SLICED_WORD_FRACTION = 0.05
 
 
 def _has_table(page) -> bool:
@@ -151,9 +195,36 @@ def _has_table(page) -> bool:
             height_fraction <= MAX_TABLE_HEIGHT_FRACTION
             and len(table.rows) >= MIN_TABLE_ROWS
             and len(table.columns) >= 2
+            and _columns_respect_words(page, table)
         ):
             return True
     return False
+
+
+def _columns_respect_words(page, table) -> bool:
+    """True when the grid's column edges fall between words, not through them."""
+    x0, top, x1, bottom = table.bbox
+    words = [
+        w for w in page.extract_words()
+        if w["top"] >= top - 2 and w["bottom"] <= bottom + 2
+    ]
+    if not words:
+        return False
+
+    edges = sorted(
+        {column.bbox[0] for column in table.columns}
+        | {column.bbox[2] for column in table.columns}
+    )[1:-1]  # interior boundaries only; the outer two are the table's own edges
+    if not edges:
+        return False
+
+    sliced = sum(
+        1
+        for edge in edges
+        for word in words
+        if word["x0"] < edge - 0.5 and word["x1"] > edge + 0.5
+    )
+    return sliced / len(words) <= MAX_SLICED_WORD_FRACTION
 
 
 def _find_gutter(words: list, page_width: float):
@@ -234,28 +305,51 @@ def _looks_multi_column(words: list, page_width: float) -> bool:
 
 
 def _has_repeated_margin_text(pages) -> bool:
+    """A running header or footer is one *line* that recurs across pages.
+
+    The band is compared line by line, not as a single joined string: the
+    top 8% of a page catches the running header *and* whatever heading
+    happens to sit near the top, so joining them made two pages with the
+    same header look different ("...Vitae JORDAN BLAKE" vs "...Vitae
+    CERTIFICATIONS") and the check never fired.
+
+    Digits are stripped before comparing, because the most common footer
+    of all is "Page 1 of 3", which is never literally identical twice.
+    """
     if len(pages) < 2:
         return False
 
-    top_lines, bottom_lines = [], []
-    for page in pages:
+    def margin_lines(page) -> set[str]:
         words = page.extract_words()
         if not words:
-            continue
+            return set()
         top_band = page.height * 0.08
         bottom_band = page.height * 0.92
-        top = " ".join(w["text"] for w in words if w["top"] <= top_band)
-        bottom = " ".join(w["text"] for w in words if w["top"] >= bottom_band)
-        top_lines.append(top.strip())
-        bottom_lines.append(bottom.strip())
 
-    def repeated(lines):
-        non_empty = [l for l in lines if l]
-        if len(non_empty) < 2:
-            return False
-        return len(set(non_empty)) < len(non_empty)
+        rows: dict[float, list[str]] = {}
+        for word in words:
+            if word["top"] <= top_band or word["top"] >= bottom_band:
+                # group by baseline; PDFs rarely place a line's words at
+                # exactly the same y
+                key = round(word["top"] / 3)
+                rows.setdefault(key, []).append(word["text"])
 
-    return repeated(top_lines) or repeated(bottom_lines)
+        lines = set()
+        for parts in rows.values():
+            text = re.sub(r"\d+", "", " ".join(parts))
+            text = re.sub(r"\s+", " ", text).strip().lower()
+            # a bare "page" or a stray bullet is not evidence of anything
+            if len(text) >= 8:
+                lines.add(text)
+        return lines
+
+    seen: dict[str, int] = {}
+    for page in pages:
+        for line in margin_lines(page):
+            seen[line] = seen.get(line, 0) + 1
+            if seen[line] >= 2:
+                return True
+    return False
 
 
 # DOCX
@@ -265,6 +359,9 @@ def check_docx(path: str) -> ParsabilityResult:
     doc = Document(path)
 
     if doc.tables:
+        result.severities["tables"] = _severity(
+            min(len(doc.tables), IMAGES_FOR_FULL_SEVERITY), IMAGES_FOR_FULL_SEVERITY
+        )
         result.has_tables = True
         result.flags.append(
             "Detected Word table structure – ATS parsers reading .docx often "
@@ -272,6 +369,9 @@ def check_docx(path: str) -> ParsabilityResult:
         )
 
     if doc.inline_shapes:
+        result.severities["images"] = _severity(
+            min(len(doc.inline_shapes), IMAGES_FOR_FULL_SEVERITY), IMAGES_FOR_FULL_SEVERITY
+        )
         result.has_images = True
         result.flags.append(
             "Detected embedded image – text inside images is invisible to "
@@ -282,6 +382,7 @@ def check_docx(path: str) -> ParsabilityResult:
         header_text = section.header.paragraphs[0].text.strip() if section.header.paragraphs else ""
         footer_text = section.footer.paragraphs[0].text.strip() if section.footer.paragraphs else ""
         if header_text or footer_text:
+            result.severities["headers_footers"] = 1.0
             result.has_headers_footers = True
             result.flags.append(
                 "Detected a Word header/footer – some ATS parsers skip these "
