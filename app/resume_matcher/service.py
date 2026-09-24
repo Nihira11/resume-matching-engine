@@ -16,6 +16,7 @@ from src.ingestion.jd_pipeline import run as ingest_jd
 from src.ingestion.pipeline import run as ingest_resume
 from src.matching.config import (
     CALIBRATION_SET_SIZE,
+    DATA_ROOT,
     VERDICT_BORDERLINE_THRESHOLD,
     VERDICT_PASS_THRESHOLD,
 )
@@ -23,7 +24,7 @@ from src.matching.embeddings import load_chunk_vectors
 from src.matching.match_pipeline import PreloadedDocuments, run_match
 from src.matching.score import fit_band, percentile_against_calibration
 from src.matching.profiles import load_jd_profile, load_resume_profile, refresh_is_required
-from src.utils.db import get_connection
+from src.utils.db import connection, get_connection
 
 COMPONENT_LABELS = {
     "skill_overlap": "Skill overlap",
@@ -79,10 +80,22 @@ def _unique_labels(rows: list[dict]) -> list[dict]:
     return rows
 
 
-def list_resumes() -> list[dict]:
+def list_resumes(session_token: str) -> list[dict]:
+    """Only this browser session's resumes.
+
+    Resumes carry names, phone numbers and addresses. A dropdown listing
+    every resume ever uploaded is the reason this app could not be
+    deployed; scoping by the Reflex client token is what makes it
+    possible. A missing token lists nothing rather than everything --
+    failing closed is the only safe direction here.
+    """
+    if not session_token:
+        return []
     rows = _query(
         "SELECT resume_id, file_name, parsability_score, uploaded_at "
-        "FROM resumes ORDER BY uploaded_at DESC, resume_id DESC"
+        "FROM resumes WHERE session_token = %s "
+        "ORDER BY uploaded_at DESC, resume_id DESC",
+        (session_token,),
     )
     return _unique_labels(
         [
@@ -97,9 +110,13 @@ def list_resumes() -> list[dict]:
     )
 
 
-def list_jds() -> list[dict]:
+def list_jds(session_token: str) -> list[dict]:
+    if not session_token:
+        return []
     rows = _query(
-        "SELECT jd_id, title, company FROM job_descriptions ORDER BY jd_id DESC"
+        "SELECT jd_id, title, company FROM job_descriptions "
+        "WHERE session_token = %s ORDER BY jd_id DESC",
+        (session_token,),
     )
     return _unique_labels(
         [
@@ -114,15 +131,19 @@ def list_jds() -> list[dict]:
     )
 
 
-def add_resume(file_path: str) -> int:
-    resume_id = ingest_resume(file_path)
+def add_resume(file_path: str, session_token: str) -> int:
+    resume_id = ingest_resume(file_path, session_token=session_token)
     clear_caches()
     return resume_id
 
 
-def add_jd(text: str, title: str = "", company: str = "") -> int:
+def add_jd(text: str, session_token: str, title: str = "", company: str = "",
+           source: str = "pasted_in_ui", source_url: str | None = None) -> int:
     title = title.strip() or _first_line(text)
-    jd_id = ingest_jd(text, title=title, company=company.strip() or None, source="pasted_in_ui")
+    jd_id = ingest_jd(
+        text, title=title, company=company.strip() or None,
+        source=source, source_url=source_url, session_token=session_token,
+    )
     clear_caches()
     return jd_id
 
@@ -372,15 +393,22 @@ def _query(sql: str, params: tuple = ()) -> list[tuple]:
 # ---------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------
-def dashboard_stats(resume_id: int | None = None) -> dict:
-    """Headline counts for the overview page.
+def dashboard_stats(resume_id: int | None = None, session_token: str = "") -> dict:
+    """Headline counts for the overview page, scoped to this session.
 
     Averages come from match_results, i.e. matches actually run -- not a
-    projection over postings never scored.
+    projection over postings never scored. The counts are session-scoped
+    for the same reason the dropdowns are: "41 postings stored" is a lie
+    to a visitor who has added two, and leaks how much other people have
+    uploaded. Only the taxonomy size is global, because it is.
     """
     counts = _query(
-        "SELECT (SELECT count(*) FROM resumes), (SELECT count(*) FROM job_descriptions), "
-        "(SELECT count(*) FROM match_results), (SELECT count(*) FROM skills_taxonomy)"
+        "SELECT (SELECT count(*) FROM resumes WHERE session_token = %s), "
+        "(SELECT count(*) FROM job_descriptions WHERE session_token = %s), "
+        "(SELECT count(*) FROM match_results m JOIN resumes r USING (resume_id) "
+        " WHERE r.session_token = %s), "
+        "(SELECT count(*) FROM skills_taxonomy)",
+        (session_token, session_token, session_token),
     )[0]
 
     best_title, best_score, avg_score = "", 0.0, 0.0
@@ -468,3 +496,131 @@ def jd_detail(jd_id: int) -> dict:
         "preferred": [r[0] for r in rows if not r[1]],
         "excerpt": (text[0][0][:700] + "…") if text and text[0][0] else "",
     }
+
+
+# ---------------------------------------------------------------------
+# Session data: loading postings, and getting rid of them again
+# ---------------------------------------------------------------------
+SAMPLES_DIR = DATA_ROOT / "data/samples"
+
+# How long a session's uploads survive. There is no dependable "browser
+# closed" signal -- a tab can be killed, a laptop can sleep, and the
+# server hears nothing -- so a sweep on a timer is the mechanism that
+# actually runs. The UI says so plainly rather than implying data
+# disappears the moment the tab does.
+SESSION_TTL_HOURS = 24
+
+
+def load_sample_postings(session_token: str) -> int:
+    """Fictional postings that ship with the repo.
+
+    Written for this project, so they cannot go stale and belong to
+    nobody. Used when the live fetch is unavailable, and as the offline
+    path generally.
+    """
+    loaded = 0
+    for path in sorted(SAMPLES_DIR.glob("*.txt")):
+        text = path.read_text(encoding="utf-8")
+        add_jd(text, session_token, source="sample", source_url=None)
+        loaded += 1
+    return loaded
+
+
+def load_live_postings(session_token: str, limit: int = 5) -> int:
+    """Current graduate/junior postings, pulled from company job boards.
+
+    Real listings beat canned ones for a demo, and fetching them at click
+    time means they can never be out of date -- which is exactly the
+    problem with shipping a fixed set of real postings.
+
+    Falls back to the fictional samples if the boards are unreachable.
+    """
+    from scripts.fetch_board_jds import (
+        AUSTRALIA,
+        BOARDS,
+        FETCHERS,
+        classify,
+        looks_like_a_vacancy,
+    )
+
+    collected: list[dict] = []
+    for provider, token, company in BOARDS:
+        if len(collected) >= limit:
+            break
+        try:
+            jobs = FETCHERS[provider](token)
+        except Exception:  # noqa: BLE001 -- a dead board is not fatal here
+            continue
+        for job in jobs:
+            if not AUSTRALIA.search(job.get("location", "")):
+                continue
+            if len(job.get("text", "")) < 400:
+                continue
+            if not looks_like_a_vacancy(job):
+                continue
+            level, domain = classify(job)
+            if level != "entry" or domain == "unrelated":
+                continue
+            job["company"] = company
+            job["_relevant"] = domain == "relevant"
+            collected.append(job)
+
+    # quant/data/AI roles are what the tool is for, and an "Associate,
+    # Office of the CEO" makes a poor first demo. The dropdown lists
+    # newest first, so the most relevant is ingested *last* to land at
+    # the top of it.
+    collected.sort(key=lambda j: not j["_relevant"])
+    collected = collected[:limit]
+    collected.reverse()
+
+    if not collected:
+        return load_sample_postings(session_token)
+
+    for job in collected:
+        body = f"{job['title']}\n{job['company']}\n{job.get('location', '')}\n\n{job['text']}"
+        add_jd(
+            body, session_token, title=job["title"], company=job["company"],
+            source="job_board", source_url=job.get("url"),
+        )
+    return len(collected)
+
+
+def clear_session(session_token: str) -> tuple[int, int]:
+    """Delete everything this session added. Returns (resumes, postings).
+
+    Entities, chunks and match results are removed by ON DELETE CASCADE.
+    """
+    if not session_token:
+        return (0, 0)
+    with connection() as conn:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM resumes WHERE session_token = %s", (session_token,))
+        resumes = cur.rowcount
+        cur.execute("DELETE FROM job_descriptions WHERE session_token = %s", (session_token,))
+        postings = cur.rowcount
+        conn.commit()
+        cur.close()
+    clear_caches()
+    return (resumes, postings)
+
+
+def purge_expired(ttl_hours: int = SESSION_TTL_HOURS) -> tuple[int, int]:
+    """Delete session data older than the TTL. Never touches NULL-token
+    rows, which are the CLI-created ones the calibration scripts use."""
+    with connection() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM resumes WHERE session_token IS NOT NULL "
+            "AND uploaded_at < now() - make_interval(hours => %s)",
+            (ttl_hours,),
+        )
+        resumes = cur.rowcount
+        cur.execute(
+            "DELETE FROM job_descriptions WHERE session_token IS NOT NULL "
+            "AND fetched_at < now() - make_interval(hours => %s)",
+            (ttl_hours,),
+        )
+        postings = cur.rowcount
+        conn.commit()
+        cur.close()
+    return (resumes, postings)

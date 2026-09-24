@@ -137,3 +137,46 @@ def test_percentile_label_never_claims_top_zero_percent():
     match = make_match()
     match.final_score = 99.0
     assert "top 0%" not in service.to_view(match)["percentile_label"]
+
+
+class TestSessionScoping:
+    """Resumes carry names, phone numbers and addresses. Listing them is
+    scoped to the browser session that uploaded them, and the no-token
+    case must fail closed — returning everything would be the exact bug
+    this scoping exists to prevent."""
+
+    def test_listing_without_a_session_returns_nothing(self):
+        assert service.list_resumes("") == []
+        assert service.list_jds("") == []
+        assert service.list_resumes(None) == []
+
+    def test_clearing_without_a_session_deletes_nothing(self):
+        assert service.clear_session("") == (0, 0)
+
+    def test_sample_postings_are_fictional_and_shipped(self):
+        files = sorted(service.SAMPLES_DIR.glob("*.txt"))
+        assert len(files) >= 3
+        for path in files:
+            text = path.read_text()
+            # stale real postings are the reason these exist
+            assert "fictional" in text.lower(), path.name
+            assert "Requirements" in text and "Nice to have" in text, path.name
+
+    def test_ttl_is_stated_in_hours_and_finite(self):
+        assert 1 <= service.SESSION_TTL_HOURS <= 168
+
+
+def test_dashboard_counts_are_session_scoped(monkeypatch):
+    """A visitor who added two postings must not be told there are 41 —
+    that overstates their own data and leaks how much others uploaded."""
+    captured = {}
+
+    def fake_query(sql, params=()):
+        captured["sql"], captured["params"] = sql, params
+        return [(0, 0, 0, 14063)]
+
+    monkeypatch.setattr(service, "_query", fake_query)
+    stats = service.dashboard_stats(resume_id=None, session_token="abc")
+    assert "session_token = %s" in captured["sql"]
+    assert captured["params"] == ("abc", "abc", "abc")
+    assert stats["skills"] == 14063        # taxonomy size stays global

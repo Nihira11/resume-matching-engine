@@ -1,0 +1,53 @@
+Graduate Data Analyst
+Northwind Analytics
+Sydney, NSW (hybrid)
+
+Northwind Analytics is a fictional analytics consultancy used as sample
+data for this project. It works with retail, energy and financial
+services clients, and is hiring a Graduate Data Analyst for its insights
+team.
+
+About the role
+
+You will work with large transactional datasets, build and maintain
+reporting pipelines, and present findings to client stakeholders who are
+not technical. Most of your first year is spent in SQL and Python, with
+growing responsibility for owning a client reporting stream end to end.
+
+What you will be doing
+
+- Write SQL queries against Postgres and Snowflake to answer client questions
+- Build and maintain dashboards in Power BI and Tableau
+- Clean, validate and reconcile data from multiple source systems
+- Apply statistical methods and predictive modelling to forecast demand
+- Automate recurring reporting with Python (pandas, numpy)
+- Present insights to client stakeholders in plain language
+- Document data definitions and maintain data quality standards
+
+Requirements
+
+- A completed bachelor's degree in data science, statistics, computer
+  science, mathematics, economics or a related quantitative discipline
+- Strong SQL, and working knowledge of Python for data analysis
+- Understanding of statistics: distributions, hypothesis testing, regression
+- Experience building dashboards or reports in any BI tool
+- Clear written and verbal communication with non-technical audiences
+- Attention to detail and a habit of checking your own work
+
+Nice to have
+
+- Exposure to machine learning libraries such as scikit-learn or XGBoost
+- Experience with version control (Git) and Jupyter notebooks
+- Familiarity with cloud data platforms (AWS, Azure or GCP)
+- Prior internship or project work involving real datasets
+- Interest in financial services or energy markets
+
+What we offer
+
+- Structured graduate program with a dedicated mentor
+- Hybrid working, three days in the office
+- Paid study leave and a professional development budget
+- 20 days annual leave plus a wellbeing day each quarter
+
+Northwind Analytics is a fictional employer. This posting exists as
+sample data and is not a real vacancy.

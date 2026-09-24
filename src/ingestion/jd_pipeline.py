@@ -15,6 +15,8 @@ Usage:
 from __future__ import annotations
 
 from src.nlp.extract_entities import extract_all
+from psycopg2.extras import execute_values
+
 from src.utils.db import get_connection
 
 
@@ -39,6 +41,7 @@ def run(
     location: str | None = None,
     source: str = "manual_paste",
     source_url: str | None = None,
+    session_token: str | None = None,
 ) -> int:
     cleaned = jd_text.strip()
     entities = extract_all(cleaned)
@@ -48,22 +51,23 @@ def run(
 
     cur.execute(
         """
-        INSERT INTO job_descriptions (source, source_url, title, company, location, raw_text, cleaned_text)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO job_descriptions (source, source_url, title, company, location, raw_text, cleaned_text, session_token)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING jd_id
         """,
-        (source, source_url, title, company, location, jd_text, cleaned),
+        (source, source_url, title, company, location, jd_text, cleaned, session_token),
     )
     jd_id = cur.fetchone()[0]
 
     entity_rows = build_entity_rows(jd_id, entities)
 
     if entity_rows:
-        cur.executemany(
-            """
-            INSERT INTO jd_entities (jd_id, entity_type, entity_value, skill_id, is_required)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
+        # execute_values sends one statement; executemany sends one round
+        # trip per row, which against a hosted database meant ~17s to store
+        # the 30-odd entities extracted from a single posting
+        execute_values(
+            cur,
+            "INSERT INTO jd_entities (jd_id, entity_type, entity_value, skill_id, is_required) VALUES %s",
             entity_rows,
         )
 

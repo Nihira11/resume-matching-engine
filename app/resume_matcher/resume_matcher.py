@@ -242,11 +242,29 @@ def sidebar() -> rx.Component:
         ),
         rx.spacer(),
         rx.box(
-            rx.text("Calibrated · 40 postings", size="1", weight="medium"),
+            rx.hstack(
+                rx.icon("clock", size=13, color=rx.color("amber", 10), flex_shrink="0"),
+                rx.text("This session only", size="1", weight="medium"),
+                spacing="2",
+                align="center",
+            ),
             rx.text(
-                "Thresholds separate one candidate's own good/no judgements. Scores compare postings with each other.",
+                "Resumes and postings you add are visible only in this browser session, "
+                "and are deleted 24 hours after you add them. Nobody else sees them.",
                 size="1",
                 color_scheme="gray",
+                margin_top="0.3em",
+            ),
+            rx.button(
+                rx.icon("trash-2", size=12),
+                "Delete my data now",
+                on_click=AppState.clear_my_data,
+                size="1",
+                variant="soft",
+                color_scheme="amber",
+                width="100%",
+                margin_top="0.5em",
+                disabled=AppState.busy,
             ),
             padding="0.8em",
             border_radius="10px",
@@ -395,6 +413,54 @@ def selection_bar() -> rx.Component:
 # ---------------------------------------------------------------------
 # overview
 # ---------------------------------------------------------------------
+def first_run_banner() -> rx.Component:
+    """A fresh session starts with empty dropdowns, so say what to do."""
+    return rx.cond(
+        (AppState.resumes.length() == 0) | (AppState.jds.length() == 0),
+        card(
+            rx.hstack(
+                rx.flex(
+                    rx.icon("hand", size=16, color=rx.color(ACCENT, 11)),
+                    align="center", justify="center", width="2.2em", height="2.2em",
+                    border_radius="10px", background=rx.color(ACCENT, 3), flex_shrink="0",
+                ),
+                rx.vstack(
+                    rx.text("Start here", size="2", weight="bold"),
+                    rx.text(
+                        rx.cond(
+                            AppState.resumes.length() == 0,
+                            "Upload a resume on the Resume tab, then add a posting — five live ones are one click away.",
+                            "Add a posting: load five live graduate roles from company job boards, paste your own, or use the fictional samples.",
+                        ),
+                        size="1",
+                        color_scheme="gray",
+                    ),
+                    spacing="0",
+                    align="start",
+                ),
+                rx.spacer(),
+                rx.hstack(
+                    rx.button(
+                        rx.icon("file-text", size=14), "Resume",
+                        on_click=AppState.go("resume"), size="2", variant="soft", color_scheme=ACCENT,
+                    ),
+                    rx.button(
+                        rx.icon("download", size=14), "Load live postings",
+                        on_click=AppState.load_live_postings, size="2", color_scheme=ACCENT,
+                        disabled=AppState.busy,
+                    ),
+                    spacing="2",
+                    wrap="wrap",
+                ),
+                width="100%", align="center", spacing="3", wrap="wrap",
+            ),
+            background=rx.color(ACCENT, 2),
+            border=f"1px solid {rx.color(ACCENT, 6)}",
+        ),
+        rx.fragment(),
+    )
+
+
 def hero() -> rx.Component:
     """Headline band: what this resume is doing against the stored postings."""
     return rx.box(
@@ -445,7 +511,8 @@ def hero() -> rx.Component:
 
 def overview_section() -> rx.Component:
     return rx.vstack(
-        page_header("Overview", "Where this resume stands against the postings you've stored."),
+        page_header("Overview", "Where this resume stands against the postings you've added this session."),
+        first_run_banner(),
         hero(),
         selection_bar(),
         rx.grid(
@@ -658,6 +725,35 @@ def postings_section() -> rx.Component:
             ),
             card(
                 card_title("Add a posting", "plus", "Keep the requirements headings intact"),
+                rx.hstack(
+                    rx.button(
+                        rx.icon("download", size=14),
+                        "Load 5 live postings",
+                        on_click=AppState.load_live_postings,
+                        disabled=AppState.busy,
+                        color_scheme=ACCENT,
+                        variant="soft",
+                        size="2",
+                    ),
+                    rx.button(
+                        rx.icon("file-text", size=14),
+                        "Load samples",
+                        on_click=AppState.load_sample_postings,
+                        disabled=AppState.busy,
+                        variant="outline",
+                        color_scheme="gray",
+                        size="2",
+                    ),
+                    spacing="2",
+                    wrap="wrap",
+                ),
+                rx.text(
+                    "Live postings are fetched from company job boards when you click, so they "
+                    "are never out of date. Samples are fictional and ship with the project.",
+                    size="1",
+                    color_scheme="gray",
+                ),
+                rx.divider(),
                 rx.input(
                     placeholder="Job title (optional — first line is used otherwise)",
                     value=AppState.jd_title,
@@ -1043,6 +1139,16 @@ def index() -> rx.Component:
                         width="100%",
                         on_click=AppState.clear_error,
                         cursor="pointer",
+                    ),
+                    rx.fragment(),
+                ),
+                rx.cond(
+                    AppState.status_note != "",
+                    rx.callout(
+                        AppState.status_note,
+                        icon="info",
+                        color_scheme=ACCENT,
+                        width="100%",
                     ),
                     rx.fragment(),
                 ),

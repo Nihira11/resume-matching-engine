@@ -193,7 +193,9 @@ cd app && reflex run                     # http://localhost:3000
 
 **Postings don't ship with the repo** — the text belongs to the employers
 who wrote it, so `data/jds/` is gitignored and the database starts empty.
-Fill it either by pasting a posting into the UI, or automatically:
+In the app, one button pulls five current graduate postings from company
+job boards and another loads three fictional samples; postings can also
+be pasted in. From the command line:
 
 ```bash
 python -m scripts.fetch_board_jds        # ~235 live Australian postings,
@@ -248,8 +250,10 @@ PostgreSQL + pgvector · spaCy · sentence-transformers (MiniLM) · BM25
   table check does most of the work.
 - Extraction against a general-purpose taxonomy still produces occasional
   nonsense ("job opportunities" → *job market offers*).
-- Single-user and local: no auth, and every stored resume is visible in
-  the dropdown — which is why it is not deployed publicly
+- Session-scoped, not authenticated: each browser session sees only what
+  it added, and that data is deleted 24 hours later. Good enough for a
+  public demo; it is not an account system, and anyone who recovers a
+  session token could read that session's data
   ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
 - 114 tests, all ordering- and behaviour-based rather than asserting
   magic score constants, so recalibration doesn't break them.

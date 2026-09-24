@@ -66,6 +66,14 @@ class BoardRow:
 
 
 class AppState(rx.State):
+    # --- session ------------------------------------------------------
+    # Everything this browser session creates is stamped with this token
+    # and listed only for it. Reflex issues one per session, so two
+    # visitors never see each other's resumes.
+    @rx.var
+    def session_token(self) -> str:
+        return self.router.session.client_token or ""
+
     # --- navigation ---------------------------------------------------
     section: str = "overview"   # overview | resume | postings | match | leaderboard
 
@@ -136,6 +144,7 @@ class AppState(rx.State):
     # --- progress / errors ------------------------------------------
     busy: bool = False
     status: str = ""
+    status_note: str = ""
     error: str = ""
 
     @rx.var
@@ -225,7 +234,7 @@ class AppState(rx.State):
     async def refresh_dashboard(self):
         resume_id = self.resume_id
         try:
-            stats = await asyncio.to_thread(service.dashboard_stats, resume_id)
+            stats = await asyncio.to_thread(service.dashboard_stats, resume_id, self.session_token)
             recent = await asyncio.to_thread(service.recent_matches, resume_id) if resume_id else []
         except Exception as exc:  # noqa: BLE001
             async with self:
@@ -261,11 +270,18 @@ class AppState(rx.State):
     # --- loading ----------------------------------------------------
     @rx.event(background=True)
     async def load_catalogues(self):
+        token = self.session_token
         async with self:
             self.error = ""
+        # opportunistic: keeps abandoned sessions from accumulating
+        # without needing a scheduler
         try:
-            resumes = await asyncio.to_thread(service.list_resumes)
-            jds = await asyncio.to_thread(service.list_jds)
+            await asyncio.to_thread(service.purge_expired)
+        except Exception:  # noqa: BLE001 -- a failed sweep must not block the page
+            pass
+        try:
+            resumes = await asyncio.to_thread(service.list_resumes, token)
+            jds = await asyncio.to_thread(service.list_jds, token)
         except Exception as exc:  # noqa: BLE001 -- surfaced in the UI
             async with self:
                 self.error = f"Could not reach the database: {exc}"
@@ -374,9 +390,10 @@ class AppState(rx.State):
 
     @rx.event(background=True)
     async def process_resume(self, target: str):
+        token = self.session_token
         try:
-            resume_id = await asyncio.to_thread(service.add_resume, str(target))
-            resumes = await asyncio.to_thread(service.list_resumes)
+            resume_id = await asyncio.to_thread(service.add_resume, str(target), token)
+            resumes = await asyncio.to_thread(service.list_resumes, token)
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
@@ -402,9 +419,10 @@ class AppState(rx.State):
             self.status = "Reading the posting and tagging its requirements…"
         try:
             jd_id = await asyncio.to_thread(
-                service.add_jd, self.jd_text, self.jd_title, self.jd_company
+                service.add_jd, self.jd_text, self.session_token,
+                self.jd_title, self.jd_company,
             )
-            jds = await asyncio.to_thread(service.list_jds)
+            jds = await asyncio.to_thread(service.list_jds, self.session_token)
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
@@ -477,6 +495,89 @@ class AppState(rx.State):
     @rx.event
     def clear_error(self):
         self.error = ""
+
+    @rx.event(background=True)
+    async def load_live_postings(self):
+        """Pull current graduate postings from company job boards.
+
+        Fetched at click time rather than shipped with the repo: real
+        postings go stale within weeks, and a demo full of dead listings
+        is worse than no demo. Falls back to the fictional samples if the
+        boards cannot be reached.
+        """
+        token = self.session_token
+        async with self:
+            self.busy = True
+            self.error = ""
+            self.status = "Fetching current graduate postings from company job boards…"
+        try:
+            count = await asyncio.to_thread(service.load_live_postings, token, 5)
+            jds = await asyncio.to_thread(service.list_jds, token)
+        except Exception as exc:  # noqa: BLE001
+            async with self:
+                self.busy, self.status = False, ""
+                self.error = f"Could not load postings: {exc}"
+            return
+        async with self:
+            self.jds = jds
+            if jds:
+                self.jd_id = jds[0]["id"]
+            self.busy, self.status = False, ""
+            self.status_note = f"Loaded {count} postings into this session."
+        return AppState.refresh_details
+
+    @rx.event(background=True)
+    async def load_sample_postings(self):
+        """Three fictional postings that ship with the repo -- written for
+        this project, so they never expire and belong to nobody."""
+        token = self.session_token
+        async with self:
+            self.busy = True
+            self.error = ""
+            self.status = "Loading sample postings…"
+        try:
+            count = await asyncio.to_thread(service.load_sample_postings, token)
+            jds = await asyncio.to_thread(service.list_jds, token)
+        except Exception as exc:  # noqa: BLE001
+            async with self:
+                self.busy, self.status = False, ""
+                self.error = f"Could not load the samples: {exc}"
+            return
+        async with self:
+            self.jds = jds
+            if jds:
+                self.jd_id = jds[0]["id"]
+            self.busy, self.status = False, ""
+            self.status_note = f"Loaded {count} sample postings into this session."
+        return AppState.refresh_details
+
+    @rx.event(background=True)
+    async def clear_my_data(self):
+        """Delete everything this session added, now rather than at TTL."""
+        token = self.session_token
+        async with self:
+            self.busy = True
+            self.status = "Deleting this session's resumes and postings…"
+        try:
+            resumes, postings = await asyncio.to_thread(service.clear_session, token)
+        except Exception as exc:  # noqa: BLE001
+            async with self:
+                self.busy, self.status = False, ""
+                self.error = f"Could not clear the session: {exc}"
+            return
+        async with self:
+            self.resumes, self.jds = [], []
+            self.resume_id = self.jd_id = 0
+            self.resume_skills, self.resume_titles = [], []
+            self.resume_education, self.resume_years = [], []
+            self.jd_required, self.jd_preferred, self.jd_excerpt = [], [], ""
+            self.parsability_score, self.resume_skill_count = 0.0, 0
+            self.parsability_flags = []
+            self._clear_result()
+            self.leaderboard = []
+            self.busy, self.status = False, ""
+            self.status_note = f"Deleted {resumes} resume(s) and {postings} posting(s)."
+        return AppState.refresh_dashboard
 
     @rx.event
     def cancel_busy(self):

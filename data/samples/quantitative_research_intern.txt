@@ -1,0 +1,51 @@
+Quantitative Research Intern
+Harbour Point Trading
+Sydney, NSW (on-site)
+
+Harbour Point Trading is a fictional proprietary trading firm used as
+sample data for this project. The internship runs for 10-12 weeks over
+the summer and sits with the research desk.
+
+About the role
+
+Interns work alongside researchers on signal research for equities and
+listed derivatives: forming a hypothesis, testing it against historical
+market data, and presenting whether it survives out-of-sample.
+
+What you will be doing
+
+- Analyse large high-frequency market datasets in Python
+- Build and validate statistical models of short-horizon price movement
+- Backtest signals and measure their decay out-of-sample
+- Study volatility behaviour and its effect on execution
+- Present research findings to traders and senior researchers
+
+Requirements
+
+- Penultimate or final-year undergraduate, or postgraduate, in
+  mathematics, statistics, physics, computer science, engineering or a
+  related quantitative field
+- Strong probability and statistics, including hypothesis testing and
+  regression analysis
+- Proficient in Python, including pandas and numpy
+- Comfort with time series analysis and forecasting
+- Evidence of independent quantitative work: a thesis, a competition, a
+  personal project
+
+Nice to have
+
+- Exposure to machine learning methods such as gradient boosting or
+  random forests
+- Experience with SQL and large datasets
+- Familiarity with options pricing or market microstructure
+- Experience with version control and reproducible research
+
+What we offer
+
+- Paid internship with accommodation and travel support
+- Mentorship from a senior researcher
+- Classroom training in market making and options theory
+- Return offers for strong performers
+
+Harbour Point Trading is a fictional employer. This posting exists as
+sample data and is not a real vacancy.

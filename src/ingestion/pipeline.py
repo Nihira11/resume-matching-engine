@@ -17,6 +17,8 @@ import sys
 from src.ingestion.ats_parsability import check_parsability
 from src.ingestion.extract_text import clean_text, extract_text
 from src.nlp.extract_entities import extract_all
+from psycopg2.extras import execute_values
+
 from src.utils.db import get_connection
 
 
@@ -34,7 +36,7 @@ def build_entity_rows(resume_id: int, entities) -> list[tuple]:
     return rows
 
 
-def run(file_path: str) -> int:
+def run(file_path: str, session_token: str | None = None) -> int:
     if not os.path.exists(file_path):
         sys.exit(f"File not found: {file_path}")
 
@@ -57,9 +59,9 @@ def run(file_path: str) -> int:
         INSERT INTO resumes (
             file_name, raw_text, cleaned_text,
             has_tables, has_multi_column, has_images, has_headers_footers,
-            parsability_score, parsability_flags
+            parsability_score, parsability_flags, session_token
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING resume_id
         """,
         (
@@ -72,6 +74,7 @@ def run(file_path: str) -> int:
             parsability.has_headers_footers,
             parsability.score,
             json.dumps(parsability.flags),
+            session_token,
         ),
     )
     resume_id = cur.fetchone()[0]
@@ -79,11 +82,12 @@ def run(file_path: str) -> int:
     entity_rows = build_entity_rows(resume_id, entities)
 
     if entity_rows:
-        cur.executemany(
-            """
-            INSERT INTO resume_entities (resume_id, entity_type, entity_value, skill_id, confidence)
-            VALUES (%s, %s, %s, %s, %s)
-            """,
+        # execute_values sends one statement; executemany sends one round
+        # trip per row, which against a hosted database meant ~17s to store
+        # the 30-odd entities extracted from a single posting
+        execute_values(
+            cur,
+            "INSERT INTO resume_entities (resume_id, entity_type, entity_value, skill_id, confidence) VALUES %s",
             entity_rows,
         )
 

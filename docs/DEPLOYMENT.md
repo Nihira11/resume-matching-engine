@@ -1,27 +1,35 @@
 # Deployment
 
-Status: **not deployed.** A `Dockerfile` is in the repo and the app runs
-locally; what follows is the honest assessment of what deploying it
-costs, and the one thing that must be fixed first.
+Status: **not deployed.** A `Dockerfile` is in the repo, the app runs
+locally, and the access model that previously blocked deployment is now
+in place. What follows is what deploying it would cost and what is left
+to check.
 
-## Blocker: there is no authentication
+## Access model: session scoping
 
-Every resume ever uploaded appears in the dropdown, to anyone with the
-URL. Resumes contain names, phone numbers, email addresses and home
-suburbs. Putting this on a public URL as it stands would publish other
-people's personal data, and there is nothing in the app to stop it.
+Resumes carry names, phone numbers and addresses, so the original
+behaviour — one shared dropdown listing every resume ever uploaded — was
+the thing that made this undeployable.
 
-Before any public deployment, one of:
+Now (`db/migrations/003_session_scoping.sql`):
 
-1. **Keep it private** — deploy behind HTTP basic auth or an allowlist,
-   as a demo for specific people. Smallest change.
-2. **Scope data per session** — a session key on `resumes`, filtered in
-   every query. Correct, and a day's work with the query surface as it
-   stands.
-3. **Demo mode** — deploy with sample resumes only and disable upload.
-   Shows the engine without holding anyone's data.
+- every resume and posting is stamped with the Reflex client token
+- the UI lists only rows carrying the current session's token, and a
+  missing token lists nothing rather than everything
+- the dashboard counts are scoped the same way, so a visitor is never
+  told there are 41 postings when they added two
+- **Delete my data now** removes a session's rows immediately, and a TTL
+  sweep (24h, `service.purge_expired`) removes what nobody deleted
 
-Option 3 is the honest default for a portfolio piece.
+What this is not: an account system. There is no login, and anyone who
+recovered a session token could read that session's data. For a public
+demo that is proportionate; for anything holding real applications it is
+not.
+
+**Session data does not disappear when the tab closes.** No such signal
+is dependable — a tab can be killed, a laptop can sleep — so the TTL is
+the mechanism that actually runs, and the UI says so rather than
+implying instant deletion.
 
 ## Size
 
@@ -79,8 +87,10 @@ Expect the first build to take several minutes, mostly torch.
 
 ## What would need doing, in order
 
-1. Pick an access model from the three above — this is the blocker.
-2. Build the image locally and fix whatever the build surfaces.
-3. Deploy to Fly.io or Reflex Cloud, with `DATABASE_URL` set as a secret.
-4. Re-check timings from the deployed region; if the database is far from
-   the app, move one of them.
+1. Build the image locally and fix whatever the build surfaces.
+2. Deploy to Fly.io or Reflex Cloud, with `DATABASE_URL` set as a secret.
+3. Re-check timings from the deployed region; if the database is far from
+   the app, move one of them — round trips dominate, and the first score
+   in a session already takes ~55s while models load.
+4. Consider a scheduled sweep rather than the opportunistic one, so a
+   site with no visitors still expires its data on time.

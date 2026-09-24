@@ -1,0 +1,49 @@
+Junior Machine Learning Engineer
+Lantern AI
+Melbourne, VIC (hybrid)
+
+Lantern AI is a fictional product company used as sample data for this
+project. It builds document-understanding features for customers in
+regulated industries, and is hiring a Junior Machine Learning Engineer.
+
+About the role
+
+You will work with the applied ML team on features that read, classify
+and summarise customer documents, taking prototypes through to something
+that runs reliably in production.
+
+What you will be doing
+
+- Build and evaluate NLP pipelines over customer documents
+- Work with large language models: prompting, evaluation, retrieval
+- Measure model quality with held-out sets and human review
+- Deploy models behind REST APIs and monitor them in production
+- Work with engineers on data pipelines feeding the models
+
+Requirements
+
+- A degree in computer science, data science, mathematics or a related
+  field, or equivalent project experience
+- Strong Python, including at least one ML framework such as PyTorch,
+  TensorFlow or scikit-learn
+- Understanding of machine learning fundamentals: training, validation,
+  overfitting, evaluation metrics
+- Familiarity with natural language processing
+- Willingness to write tests and review other people's code
+
+Nice to have
+
+- Experience with large language models, RAG or prompt engineering
+- Exposure to vector databases or embeddings
+- Docker, CI/CD, or cloud platforms (AWS, Azure, GCP)
+- Open-source contributions or published projects
+
+What we offer
+
+- Mentorship and a structured ramp-up over your first quarter
+- Conference and training budget
+- Hybrid working, two days in the Melbourne office
+- Flexible hours
+
+Lantern AI is a fictional employer. This posting exists as sample data
+and is not a real vacancy.

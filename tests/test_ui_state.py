@@ -101,7 +101,7 @@ def test_short_paste_is_rejected_without_touching_the_pipeline(monkeypatch):
 def test_saving_a_posting_selects_it_and_resets_the_form(monkeypatch):
     s = new_state()
     monkeypatch.setattr(service, "add_jd", lambda *a, **k: 99)
-    monkeypatch.setattr(service, "list_jds", lambda: [{"id": 99, "label": "#99 · New"}])
+    monkeypatch.setattr(service, "list_jds", lambda token: [{"id": 99, "label": "#99 · New"}])
     s.jd_text = "x" * 250
     s.jd_title = "Data Scientist"
     drain(s, "save_pasted_jd")
@@ -174,8 +174,8 @@ def test_page_load_fills_the_parsability_panel(monkeypatch):
     # event, whose delta could land after the browser reconnected -- the
     # panel then sat at 0/100 with "0 skill mentions" for a parsed resume
     s = AppState(_reflex_internal_init=True)
-    monkeypatch.setattr(service, "list_resumes", lambda: [{"id": 5, "label": "#5 · mine.pdf"}])
-    monkeypatch.setattr(service, "list_jds", lambda: [{"id": 1, "label": "#1 · DA", "title": "DA", "company": "Iress"}])
+    monkeypatch.setattr(service, "list_resumes", lambda token: [{"id": 5, "label": "#5 · mine.pdf"}])
+    monkeypatch.setattr(service, "list_jds", lambda token: [{"id": 1, "label": "#1 · DA", "title": "DA", "company": "Iress"}])
     monkeypatch.setattr(service, "resume_summary", lambda rid: {
         "file_name": "mine.pdf", "parsability": 75.0, "skills": 93, "flags": ["table detected"]})
     drain(s, "load_catalogues")
@@ -194,8 +194,32 @@ def test_stale_summary_does_not_overwrite_a_newer_selection(monkeypatch):
 
 def test_database_failure_on_load_is_surfaced(monkeypatch):
     s = AppState(_reflex_internal_init=True)
-    def boom():
+    def boom(token):
         raise RuntimeError("tenant not found")
     monkeypatch.setattr(service, "list_resumes", boom)
     drain(s, "load_catalogues")
     assert "Could not reach the database" in s.error and "tenant not found" in s.error
+
+
+def test_clearing_session_empties_every_panel(monkeypatch):
+    s = new_state()
+    s._apply_view(VIEW)
+    s.resume_skills = ["SQL"]
+    s.jd_required = ["Python"]
+    monkeypatch.setattr(service, "clear_session", lambda token: (1, 2))
+    drain(s, "clear_my_data")
+    assert s.resumes == [] and s.jds == []
+    assert s.resume_id == 0 and s.jd_id == 0
+    assert s.resume_skills == [] and s.jd_required == []
+    assert not s.has_result and s.leaderboard == []
+    assert "Deleted 1 resume(s) and 2 posting(s)" in s.status_note
+
+
+def test_live_postings_fall_back_and_report(monkeypatch):
+    s = new_state()
+    monkeypatch.setattr(service, "load_live_postings", lambda token, n: 5)
+    monkeypatch.setattr(service, "list_jds", lambda token: [{"id": 7, "label": "#7 · Grad DA"}])
+    drain(s, "load_live_postings")
+    assert s.jd_id == 7
+    assert "Loaded 5 postings" in s.status_note
+    assert not s.busy

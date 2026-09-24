@@ -114,8 +114,13 @@ spinner for the whole set.
   `scripts/add_jd.py`. The API truncates descriptions at 500 characters,
   which is not enough to score against, so the UI deliberately doesn't
   offer it as a shortcut.
-- **No auth and no per-user separation.** Every resume in the database is
-  visible in the dropdown. Fine locally; a blocker for deployment.
+- **Session-scoped, not authenticated.** Every resume and posting is
+  stamped with the Reflex client token and listed only for that session,
+  and `list_resumes("")` returns nothing rather than everything — failing
+  closed, because the open version was the reason this could not be
+  deployed. It is not an account system: there is no login, and session
+  data lives until the TTL sweep rather than until the tab closes, since
+  no "browser closed" signal is reliable.
 - **Chunk embeddings are cached, but not invalidated.**
   `service.ensure_embeddings` embeds a document only when pgvector holds
   no chunks for it, which is what makes the leaderboard tolerable. Editing
