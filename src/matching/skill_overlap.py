@@ -19,7 +19,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from src.matching.config import PREFERRED_SKILL_WEIGHT, REQUIRED_SKILL_WEIGHT
+from src.matching.config import (
+    PREFERRED_SKILL_WEIGHT,
+    REQUIRED_SKILL_WEIGHT,
+    SKILL_OVERLAP_MIN_EVIDENCE,
+)
 from src.matching.profiles import JDProfile, ResumeProfile
 
 
@@ -63,8 +67,12 @@ def score_skill_overlap(resume: ResumeProfile, jd: JDProfile) -> SkillOverlapRes
         + len(preferred) * PREFERRED_SKILL_WEIGHT
     )
 
+    # Denominator floored at SKILL_OVERLAP_MIN_EVIDENCE: a thin posting is
+    # weak evidence, not strong evidence of a match. See config.py for the
+    # false positive that motivated it.
+    denominator = max(available, SKILL_OVERLAP_MIN_EVIDENCE)
     return SkillOverlapResult(
-        score=earned / available if available else None,
+        score=earned / denominator if available else None,
         matched_required=matched_required,
         matched_preferred=matched_preferred,
         missing_required=sorted(required - resume.skill_ids),

@@ -122,9 +122,8 @@ python -m scripts.build_bm25_corpus
 
 ## Next
 
-1. Calibrate weights and verdict thresholds against this distribution,
-   extended with more postings — including some the resume genuinely
-   doesn't fit, as negative controls.
-2. Measure `SEMANTIC_FLOOR`/`SEMANTIC_CEILING` from the observed
-   similarity distribution instead of the current estimate.
-3. Score a resume that has job titles, to exercise the title component.
+Done, on 24 September 2026 — see `CALIBRATION.md`. The evaluation set grew
+to 40 postings with negative controls, the thresholds were derived from
+the data (70/45 → 37/30), the semantic bounds were measured rather than
+guessed, and a resume with job titles was scored, which exercised the
+title component and exposed the circularity in judging it.

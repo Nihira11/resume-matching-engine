@@ -24,6 +24,7 @@ from src.matching.profiles import (
     extract_jd_min_years,
     split_requirement_sections,
 )
+from src.matching.config import REQUIRED_SKILL_WEIGHT
 from src.matching.score import blend, verdict_for
 from src.matching.semantic import score_semantic
 from src.matching.skill_overlap import score_skill_overlap
@@ -59,14 +60,23 @@ def make_resume(skills, **kwargs) -> ResumeProfile:
 # Skill overlap
 # ---------------------------------------------------------------------
 class TestSkillOverlap:
+    def test_thin_posting_cannot_score_highly(self):
+        # calibration regression: 2 matches out of a 2-skill posting used
+        # to score 1.0 and outrank 8-of-18 on a real data analyst role
+        thin = score_skill_overlap(make_resume([PYTHON, SQL]), make_jd([PYTHON, SQL])).score
+        assert thin < 0.5
+
+    def test_full_match_on_a_substantial_posting_still_scores_one(self):
+        every = [PYTHON, SQL, SPARK, AIRFLOW, TABLEAU]
+        full = score_skill_overlap(make_resume(every), make_jd(every, preferred=[])).score
+        assert full == pytest.approx(len(every) / 7.0)  # floored denominator
+
     def test_ordering_perfect_partial_none(self):
-        jd = make_jd([PYTHON, SQL, SPARK])
-        perfect = score_skill_overlap(make_resume([PYTHON, SQL, SPARK]), jd).score
+        jd = make_jd([PYTHON, SQL, SPARK, AIRFLOW, TABLEAU])
+        perfect = score_skill_overlap(make_resume([PYTHON, SQL, SPARK, AIRFLOW, TABLEAU]), jd).score
         partial = score_skill_overlap(make_resume([PYTHON, SQL]), jd).score
-        none = score_skill_overlap(make_resume([TABLEAU]), jd).score
-        assert perfect > partial > none
-        assert perfect == pytest.approx(1.0)
-        assert none == pytest.approx(0.0)
+        none = score_skill_overlap(make_resume([]), jd).score
+        assert none < partial < perfect
 
     def test_required_outweighs_preferred(self):
         jd = make_jd(required=[PYTHON], preferred=[SQL])
@@ -77,8 +87,10 @@ class TestSkillOverlap:
     def test_skill_in_both_lists_counts_as_required(self):
         jd = make_jd(required=[PYTHON], preferred=[PYTHON])
         result = score_skill_overlap(make_resume([PYTHON]), jd)
-        assert result.score == pytest.approx(1.0)
+        # counted once, as required -- not double-counted across both lists
+        assert result.matched_required == [PYTHON]
         assert result.matched_preferred == []
+        assert result.score == pytest.approx(REQUIRED_SKILL_WEIGHT / 7.0)
 
     def test_no_jd_skills_returns_none_not_zero(self):
         # A JD with no extractable skills says nothing about the resume.
@@ -252,9 +264,18 @@ class TestBlend:
         assert score == 0.0 and weights == {}
 
     def test_verdict_ordering(self):
-        assert verdict_for(95) == "likely_pass"
-        assert verdict_for(55) == "borderline"
-        assert verdict_for(10) == "likely_reject"
+        # relative to the configured thresholds, not to hardcoded numbers:
+        # calibration moved them from 70/45 to 37/30 and will move them
+        # again as the evaluation set grows
+        from src.matching.config import (
+            VERDICT_BORDERLINE_THRESHOLD,
+            VERDICT_PASS_THRESHOLD,
+        )
+        assert verdict_for(VERDICT_PASS_THRESHOLD + 5) == "likely_pass"
+        assert verdict_for(VERDICT_PASS_THRESHOLD) == "likely_pass"
+        assert verdict_for(VERDICT_BORDERLINE_THRESHOLD + 1) == "borderline"
+        assert verdict_for(VERDICT_BORDERLINE_THRESHOLD - 1) == "likely_reject"
+        assert VERDICT_BORDERLINE_THRESHOLD < VERDICT_PASS_THRESHOLD
 
 
 # ---------------------------------------------------------------------

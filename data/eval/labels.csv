@@ -1,0 +1,41 @@
+jd_id,title,company,level,domain,url,label,label_source
+1,Data Analyst,Iress,mid,other,,good,reviewed
+2,Graduate Analyst – Energy Service,GloBird Energy,entry,other,,good,reviewed
+3,Associate Data Scientist,Culture Amp,entry,other,,good,reviewed
+4,Data Scientist - AI & Analytics,Westpac Group,mid,relevant,,maybe,reviewed
+5,Intern - Engineering/AI,FOBOH,entry,relevant,,good,reviewed
+6,Applied AI Engineer – Student or Graduate,Deloitte,entry,relevant,,good,reviewed
+7,Machine Learning Research Intern - Summer 2027 - Sydney,IMC Trading,entry,relevant,,maybe,reviewed
+8,"Applied AI Engineer, Australia",Mistral,mid,relevant,,no,reviewed
+9,"AI Business Analyst, Financial Markets",Reserve Bank of Australia,mid,relevant,,maybe,reviewed
+10,Business Analyst,Wotton Kearney,mid,other,,maybe,reviewed
+11,Business Analyst,PropertyMe,mid,other,,no,reviewed
+12,Business Analyst,Mirvac,mid,other,,no,reviewed
+13,Options Quant Support Analyst,CMC Markets,mid,relevant,,maybe,reviewed
+14,"Quantitative Researcher Intern, Bachelor's or Master's",Tower Research Capital,entry,relevant,https://www.tower-research.com/open-positions/?gh_jid=8168750,good,reviewed
+15,Machine Learning Research Intern - Summer 2027 - Sydney,IMC Trading,entry,relevant,https://job-boards.eu.greenhouse.io/imc/jobs/4956547101,maybe,reviewed
+16,"Associate, Office of the CEO",Eucalyptus,entry,other,https://job-boards.greenhouse.io/eucalyptus/jobs/4729898005,no,reviewed
+17,Associate Site Reliability Engineer,Culture Amp,entry,other,https://job-boards.greenhouse.io/cultureamp/jobs/8219709,maybe,reviewed
+18,Java Software Engineer,IMC Trading,mid,relevant,https://job-boards.eu.greenhouse.io/imc/jobs/4855354101,no,reviewed
+19,Software Engineer C++,Akuna Capital,mid,relevant,https://www.akunacapital.com/careers/job/8163512/?gh_jid=8163512,no,reviewed
+20,Options Trader,VivCourt,mid,relevant,https://www.vivcourt.com/job-listings/?gh_jid=4713731006,maybe,reviewed
+21,"Software Engineer, Spend",Airwallex,mid,relevant,https://jobs.ashbyhq.com/airwallex/fe00d5d7-9db3-4a12-8ac2-3e5373857782,no,reviewed
+22,Quantitative Trader / Researcher - APAC,Tower Research Capital,mid,relevant,https://www.tower-research.com/open-positions/?gh_jid=4958633,maybe,reviewed
+23,Data Scientist - Product Analytics,Quantium,mid,relevant,https://job-boards.anz.greenhouse.io/quantium/jobs/4005587201,good,reviewed
+24,Performance Engineer,IMC Trading,mid,other,https://job-boards.eu.greenhouse.io/imc/jobs/4871364101,no,reviewed
+25,Expression of Interest,Immutable,mid,other,https://jobs.lever.co/immutable/5128812a-ca47-4b8e-a59e-57470a298c4b,no,reviewed
+26,Senior Applied AI Engineer,Culture Amp,senior,relevant,https://job-boards.greenhouse.io/cultureamp/jobs/8184634,no,reviewed
+27,"Engineering Manager, Agentic AI Platform",Quantium,senior,relevant,https://job-boards.anz.greenhouse.io/quantium/jobs/4000776201,no,reviewed
+28,Risk & Control Lead - 12 month FTC,Prospa,senior,relevant,https://www.prospa.com/about-us/careers?gh_jid=8168841,no,reviewed
+29,Senior AI Engineer (Risk & Payments),Airwallex,senior,relevant,https://jobs.ashbyhq.com/airwallex/515dfe61-86b3-4482-a41d-6d72e0558cdc,no,reviewed
+30,"Senior Risk Analyst, Controls Testing (12mth Contract)",PEXA,senior,relevant,https://jobs.lever.co/pexa/2e20a96f-c238-437c-9e00-349781944ad9,no,reviewed
+31,"Staff Software Engineer, Financial Platform - Issuing",Block,senior,relevant,http://block.xyz/careers/jobs/5414628008?gh_jid=5414628008,no,reviewed
+32,New Business Sales Consultant,Prospa,mid,unrelated,https://www.prospa.com/about-us/careers?gh_jid=8185377,no,auto
+33,"Sales Development Representative, Allbound",Culture Amp,mid,unrelated,https://job-boards.greenhouse.io/cultureamp/jobs/8045809,no,auto
+34,Trade Support Engineer,Akuna Capital,mid,other,https://www.akunacapital.com/careers/job/8166538/?gh_jid=8166538,maybe,reviewed
+35,"Nurse Practitioner, Australia (Weight + Men's Health)",Eucalyptus,mid,unrelated,https://job-boards.greenhouse.io/eucalyptus/jobs/4661672005,no,auto
+36,"Senior Account Executive, Mid Market",Airwallex,senior,unrelated,https://jobs.ashbyhq.com/airwallex/f36a1033-460d-4a08-9268-5108418792db,no,auto
+37,"Lead Talent Acquisition Partner, Engineering",Quantium,senior,unrelated,https://job-boards.anz.greenhouse.io/quantium/jobs/4006892201,no,auto
+38,Senior Performance Marketing Manager,Eucalyptus,senior,unrelated,https://job-boards.greenhouse.io/eucalyptus/jobs/4721039005,no,auto
+39,"Manager, Field Sales - Melbourne",Block,senior,unrelated,http://block.xyz/careers/jobs/5374508008?gh_jid=5374508008,no,auto
+40,Design Manager,AirTrunk,senior,unrelated,https://job-boards.greenhouse.io/airtrunk/jobs/7813428003,no,auto

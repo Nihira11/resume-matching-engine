@@ -37,6 +37,18 @@ COMPONENT_WEIGHTS: dict[str, float] = {
 # look bad.
 REQUIRED_SKILL_WEIGHT = 1.0
 PREFERRED_SKILL_WEIGHT = 0.4
+# Floor under the overlap denominator, so a posting with very few
+# extractable skills cannot score highly on a coincidence. Calibration on
+# 40 real postings found the top false positive was a "Lead Talent
+# Acquisition Partner" role: 4 skills extracted, 2 matched, scoring 50 --
+# above a data analyst posting where 8 of 18 matched (39). A thin posting
+# is weak evidence, not strong evidence.
+#
+# A floor rather than additive smoothing: matching everything a
+# substantial posting asks for should still score 1.0, and smoothing took
+# that away. Postings with at least this much weight are scored normally;
+# thinner ones are divided by the floor. See docs/validation-results.md.
+SKILL_OVERLAP_MIN_EVIDENCE = 7.0
 
 # Phrases that flip a JD section from required to preferred. Applied at
 # section level, not per-sentence -- JDs signal this with headings far
@@ -162,20 +174,38 @@ EMBEDDING_DIM = 384  # must match vector(384) in schema.sql
 CHUNK_TARGET_CHARS = 600
 CHUNK_MIN_CHARS = 120
 
-# MiniLM cosine similarity between two pieces of professional English
-# almost never leaves roughly [0.25, 0.75], so raw cosine compresses every
-# pair into a narrow band and the component stops discriminating. Rescaled
-# to spread that band across [0, 1]. These bounds are the most obviously
-# provisional numbers in this file -- calibration should set them from the
-# observed distribution over real postings rather than this estimate.
-SEMANTIC_FLOOR = 0.25
-SEMANTIC_CEILING = 0.75
+# Measured, not estimated. Across 268 real resume-posting matches the raw
+# pooled MiniLM similarity ran 0.11 to 0.51: p5 0.19, median 0.32, p95
+# 0.44. The original [0.25, 0.75] guess put the ceiling above anything
+# that ever occurs, so the component could never exceed ~0.5, while a
+# quarter of all pairs fell under the floor and clipped to exactly 0 --
+# losing the distinction between "unrelated" and "very unrelated".
+# Bounds now sit just outside the observed range (p2 to p95), which
+# spreads the real distribution across most of [0, 1].
+SEMANTIC_FLOOR = 0.15
+SEMANTIC_CEILING = 0.45
 
 # ---------------------------------------------------------------------
 # Verdicts (0-100 scale, matching the NUMERIC(5,2) score columns)
 # ---------------------------------------------------------------------
-VERDICT_PASS_THRESHOLD = 70.0
-VERDICT_BORDERLINE_THRESHOLD = 45.0
+# Calibrated 24 Sep 2026 against 40 real postings labelled by the
+# candidate (good / maybe / no) -- see docs/validation-results.md.
+#
+# The original 70 / 45 were placeholders set before any data existed, and
+# they put every real posting in "likely reject", including roles the
+# candidate rated a good fit. On the observed distribution, "good"
+# postings score 32-50, "maybe" 22-39 and "no" 9-36.
+#
+# 37 is where "good" separates cleanly: 6 of 7 good postings clear it and
+# none of the 23 "no" postings do. 30 keeps every good posting inside the
+# borderline band; 9 of the "no" set land there too, which is the right
+# side to err on for a band that means "worth a look".
+#
+# These are separation points on one resume and 40 postings, not an
+# absolute standard. Scores are comparable between postings, not against
+# some external notion of employability.
+VERDICT_PASS_THRESHOLD = 37.0
+VERDICT_BORDERLINE_THRESHOLD = 30.0
 
 # ---------------------------------------------------------------------
 # Gap analysis

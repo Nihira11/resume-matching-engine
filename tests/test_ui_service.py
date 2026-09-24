@@ -101,8 +101,15 @@ def test_experience_note_reports_shortfall():
     assert "2 year(s) short" in service.to_view(match)["experience_note"]
 
 
-def test_verdict_caveat_names_the_thresholds():
-    assert "70" in service.VERDICT_CAVEAT and "45" in service.VERDICT_CAVEAT
+def test_verdict_caveat_names_the_calibrated_thresholds():
+    from src.matching.config import (
+        VERDICT_BORDERLINE_THRESHOLD,
+        VERDICT_PASS_THRESHOLD,
+    )
+    assert f"{VERDICT_PASS_THRESHOLD:.0f}" in service.VERDICT_CAVEAT
+    assert f"{VERDICT_BORDERLINE_THRESHOLD:.0f}" in service.VERDICT_CAVEAT
+    # the caveat must keep saying what the number is worth
+    assert "calibrated" in service.VERDICT_CAVEAT
 
 
 def test_labels_disambiguate_duplicates():

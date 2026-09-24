@@ -1,7 +1,9 @@
 # Matching Engine
 
-Status: implemented and run end-to-end against real postings; not yet
-calibrated. The first real run found five bugs that every unit test
+Status: implemented, run end-to-end against real postings, and calibrated
+on 24 Sep 2026 against 40 labelled postings (`CALIBRATION.md`). Verdict
+thresholds are now derived from data; component weights are deliberately
+unchanged, for reasons recorded there. The first real run found five bugs that every unit test
 missed — three of them in this engine, written up in
 `validation-results.md` and summarised in "Fixes from the first real run"
 below. Weights and verdict thresholds are still uncalibrated.
@@ -355,20 +357,27 @@ control against two unrelated resumes, are in `validation-results.md`.
   at now.
 - **BM25 absolute values read low** – see above. Ordering is sound;
   the number isn't meaningful on its own yet.
-- **Every real posting scored so far lands below the borderline
-  threshold.** 13 postings, best score 40.7 against a 45 borderline / 70
-  pass threshold. The thresholds were set before any real data existed and
-  this run is the first evidence they're wrong; calibrating them needs
-  more postings, including deliberate mismatches as negative controls.
+- **Domain discrimination is weak.** Calibration measured relevant vs
+  unrelated postings at AUC 0.68 — the engine orders plausible matches
+  well but cannot reliably tell a data role from a sales one. Suspected
+  cause: ESCO's generic competency tail ("communication", "statistics")
+  appears in nearly every posting and resume, giving every pair a floor of
+  overlap. Next fix, and an extraction problem rather than a weighting one.
+- **Thresholds come from 40 postings labelled by one person**, corrected
+  from a drafted sheet rather than labelled blind. Leave-one-out band
+  accuracy is 70%.
 - **Boilerplate detection is heading-driven**, so a posting with no
   headings keeps its benefits and EEO text in both the BM25 query and the
   embedded chunks. `strip_boilerplate` falls back to the full text rather
   than returning nothing.
-- **Semantic rescale bounds are estimated, not measured.** The single
-  biggest source of miscalibration in the current blend.
-- **All weights are reasoned, not evidenced.** That is the entire point of
-  calibration, and the README should say so rather than implying the numbers
-  were derived from anything.
+- ~~Semantic rescale bounds are estimated~~ — measured on 24 Sep 2026
+  across 268 matches and corrected from [0.25, 0.75] to [0.15, 0.45]. The
+  old ceiling was unreachable and a quarter of pairs clipped to zero.
+- **Weights are still reasoned, not fitted.** Calibration tested 162
+  alternatives and kept the originals: the only weighting that beat them
+  did so by leaning on the title component, whose apparent perfection is
+  circular (`CALIBRATION.md`). `experience` contributes nothing on the
+  current set — only 4 of 40 postings state a minimum.
 - **ESCO/common-word ambiguity from extraction persists**, though intersection
   mitigates it considerably (see skill overlap above).
 - **Round trips, not compute, dominate a match.** Fixed in part:

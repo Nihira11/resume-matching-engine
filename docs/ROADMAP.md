@@ -55,10 +55,13 @@ Full detail in `docs/UI.md`.
 
 ## Validation against real postings
 
-- Run the tool against real job postings applied to personally, not just Kaggle bulk data — first pass done: 13 real Sydney postings, written up in `docs/validation-results.md`
-- Sanity-check: does the tool's verdict match actual intuition about fit — ordering does; the verdicts don't, every posting still lands below the borderline threshold
-- Calibrate scoring weights and verdict thresholds against this distribution, extended with more postings including deliberate mismatches as negative controls
-- Measure the semantic rescale bounds from the observed similarity distribution instead of the current estimate
+- Run the tool against real job postings, not just Kaggle bulk data — 40 postings, 27 pulled straight from company job boards, scored against 6 resumes
+- Sanity-check against the candidate's own judgement — no posting labelled a good fit is rejected, none ruled out passes
+- Calibrate verdict thresholds (70/45 → 37/30) and test 162 weightings; weights kept, for reasons recorded
+- Measure the semantic rescale bounds from the observed distribution ([0.25, 0.75] → [0.15, 0.45])
+- Known weakness, measured and documented: domain discrimination is weak (structural AUC 0.68)
+
+Full detail in `docs/CALIBRATION.md`.
 
 ## Polish & deployment
 

@@ -47,14 +47,15 @@ VERDICT_LABELS = {
 
 VERDICT_COLORS = {"likely_pass": "grass", "borderline": "amber", "likely_reject": "tomato"}
 
-# Shown under every verdict. The thresholds have never been calibrated
-# against real postings, and on the 13 scored so far every result landed
-# below "borderline" -- so the UI says what the number is worth instead of
-# implying a hiring decision.
+# Shown under every verdict. Calibrated 24 Sep 2026 on 40 real postings
+# labelled by the candidate; the thresholds separate that set cleanly but
+# come from one resume and one labeller, so the wording says what the
+# score is comparable to rather than implying a hiring decision.
 VERDICT_CAVEAT = (
     f"Thresholds ({VERDICT_PASS_THRESHOLD:.0f} pass / {VERDICT_BORDERLINE_THRESHOLD:.0f} "
-    "borderline) are not yet calibrated. Compare postings against each other rather "
-    "than reading one score on its own."
+    "borderline) were calibrated on 40 real postings labelled by one candidate: no "
+    "posting they called a good fit was rejected, and none they ruled out passed. "
+    "Scores compare postings against each other, not against an external standard."
 )
 
 
