@@ -137,6 +137,29 @@ def fetch_ashby(token: str) -> list[dict]:
 FETCHERS = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetch_ashby}
 
 
+# Boards carry more than vacancies: talent-community sign-ups, conference
+# booths, "expression of interest" pages. They have no requirements to
+# score against, and one ("Connect with us at ICLR 2026!") was picked up
+# by the entry-level filter because of the year in its title.
+_NOT_A_VACANCY = re.compile(
+    r"connect with us|expression of interest|talent (community|pool|network)|"
+    r"join our (talent|network)|general application|keep in touch|"
+    r"speculative|meet us at|visit us at|career fair",
+    re.I,
+)
+_REQUIREMENT_LANGUAGE = re.compile(
+    r"requirements|qualifications|what you.{0,3}ll (bring|do|need)|"
+    r"you will|you have|skills|experience", re.I,
+)
+
+
+def looks_like_a_vacancy(job: dict) -> bool:
+    """A posting worth scoring states what it wants from a candidate."""
+    if _NOT_A_VACANCY.search(job.get("title", "")):
+        return False
+    return bool(_REQUIREMENT_LANGUAGE.search(job.get("text", "")))
+
+
 def classify(job: dict) -> tuple[str, str]:
     """(level, domain) -- the axes the evaluation set needs to span."""
     title = job["title"]
@@ -170,6 +193,8 @@ def collect() -> list[dict]:
             if not AUSTRALIA.search(job.get("location", "")):
                 continue
             if len(job.get("text", "")) < 400:
+                continue
+            if not looks_like_a_vacancy(job):
                 continue
             job["company"] = company
             job["level"], job["domain"] = classify(job)

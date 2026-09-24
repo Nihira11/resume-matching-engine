@@ -20,6 +20,8 @@ import argparse
 
 from src.ingestion import jd_pipeline, pipeline
 from src.nlp.extract_entities import extract_all
+from psycopg2.extras import execute_values
+
 from src.utils.db import get_connection
 
 
@@ -35,10 +37,7 @@ def reextract(table: str, id_column: str, entity_table: str, build_rows, columns
         rows = build_rows(doc_id, extract_all(text or ""))
         cur.execute(f"DELETE FROM {entity_table} WHERE {id_column} = %s", (doc_id,))
         if rows:
-            placeholders = ", ".join(["%s"] * len(rows[0]))
-            cur.executemany(
-                f"INSERT INTO {entity_table} ({columns}) VALUES ({placeholders})", rows
-            )
+            execute_values(cur, f"INSERT INTO {entity_table} ({columns}) VALUES %s", rows)
         conn.commit()
         print(f"  {table} {doc_id}: {before} -> {len(rows)} entities")
 
