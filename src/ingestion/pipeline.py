@@ -16,8 +16,11 @@ import sys
 
 from src.ingestion.ats_parsability import check_parsability
 from src.ingestion.extract_text import clean_text, extract_text
+from src.ingestion.preview import render_first_page
 from src.nlp.extract_entities import extract_all
 from psycopg2.extras import execute_values
+
+import psycopg2
 
 from src.utils.db import get_connection
 
@@ -49,6 +52,7 @@ def run(file_path: str, session_token: str | None = None) -> int:
 
     cleaned = clean_text(raw_text)
     parsability = check_parsability(file_path)
+    preview = render_first_page(file_path)
     entities = extract_all(cleaned)
 
     conn = get_connection()
@@ -59,9 +63,9 @@ def run(file_path: str, session_token: str | None = None) -> int:
         INSERT INTO resumes (
             file_name, raw_text, cleaned_text,
             has_tables, has_multi_column, has_images, has_headers_footers,
-            parsability_score, parsability_flags, session_token
+            parsability_score, parsability_flags, session_token, preview_png
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING resume_id
         """,
         (
@@ -75,6 +79,7 @@ def run(file_path: str, session_token: str | None = None) -> int:
             parsability.score,
             json.dumps(parsability.flags),
             session_token,
+            psycopg2.Binary(preview) if preview else None,
         ),
     )
     resume_id = cur.fetchone()[0]
