@@ -12,6 +12,8 @@ so the websocket event loop keeps serving.
 """
 from __future__ import annotations
 
+import base64
+
 from src.ingestion.jd_pipeline import run as ingest_jd
 from src.ingestion.pipeline import run as ingest_resume
 from src.matching.config import (
@@ -352,7 +354,7 @@ def parsability_flags(resume_id: int) -> list[str]:
 
 def resume_summary(resume_id: int) -> dict:
     rows = _query(
-        "SELECT file_name, parsability_score FROM resumes WHERE resume_id = %s",
+        "SELECT file_name, parsability_score, preview_png FROM resumes WHERE resume_id = %s",
         (resume_id,),
     )
     if not rows:
@@ -364,12 +366,21 @@ def resume_summary(resume_id: int) -> dict:
             (resume_id,),
         )
     )
+    # inlined as a data URI rather than served from a route: the image
+    # belongs to one session's resume, and a URL for it would be another
+    # thing to authorise and another thing to clean up
+    preview = rows[0][2]
+    preview_uri = ""
+    if preview:
+        preview_uri = "data:image/png;base64," + base64.b64encode(bytes(preview)).decode()
+
     return {
         "file_name": rows[0][0],
         "parsability": float(rows[0][1] or 0),
         "skills": counts.get("skill", 0),
         "titles": counts.get("title", 0),
         "flags": parsability_flags(resume_id),
+        "preview": preview_uri,
     }
 
 
@@ -502,6 +513,7 @@ def jd_detail(jd_id: int) -> dict:
 # Session data: loading postings, and getting rid of them again
 # ---------------------------------------------------------------------
 SAMPLES_DIR = DATA_ROOT / "data/samples"
+SAMPLE_RESUMES_DIR = SAMPLES_DIR / "resumes"
 
 # How long a session's uploads survive. There is no dependable "browser
 # closed" signal -- a tab can be killed, a laptop can sleep, and the
@@ -522,6 +534,22 @@ def load_sample_postings(session_token: str) -> int:
     for path in sorted(SAMPLES_DIR.glob("*.txt")):
         text = path.read_text(encoding="utf-8")
         add_jd(text, session_token, source="sample", source_url=None)
+        loaded += 1
+    return loaded
+
+
+def load_sample_resumes(session_token: str) -> int:
+    """Two fictional resumes, for showing the tool without uploading a CV.
+
+    Deliberately a matched pair: one clean single-column layout that
+    scores 100 on parsability, and one with a ruled skills table, an
+    embedded photo and a running header -- the three things a real ATS
+    mangles -- which scores 50. The difference between them is the whole
+    argument for checking formatting separately from content.
+    """
+    loaded = 0
+    for path in sorted(SAMPLE_RESUMES_DIR.glob("*.pdf")):
+        add_resume(str(path), session_token)
         loaded += 1
     return loaded
 

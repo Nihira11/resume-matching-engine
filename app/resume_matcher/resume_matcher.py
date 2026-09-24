@@ -413,46 +413,88 @@ def selection_bar() -> rx.Component:
 # ---------------------------------------------------------------------
 # overview
 # ---------------------------------------------------------------------
-def first_run_banner() -> rx.Component:
-    """A fresh session starts with empty dropdowns, so say what to do."""
+def quick_start() -> rx.Component:
+    """Everything needed to see the tool work, on the page people land on.
+
+    The loaders used to live on the Resume and Job postings tabs, which
+    assumes a visitor goes looking for them. Most will not: they open the
+    dashboard, see empty dropdowns, and leave.
+    """
     return rx.cond(
         (AppState.resumes.length() == 0) | (AppState.jds.length() == 0),
         card(
             rx.hstack(
                 rx.flex(
-                    rx.icon("hand", size=16, color=rx.color(ACCENT, 11)),
+                    rx.icon("rocket", size=16, color=rx.color(ACCENT, 11)),
                     align="center", justify="center", width="2.2em", height="2.2em",
                     border_radius="10px", background=rx.color(ACCENT, 3), flex_shrink="0",
                 ),
                 rx.vstack(
-                    rx.text("Start here", size="2", weight="bold"),
+                    rx.text("Try it in two clicks", size="2", weight="bold"),
                     rx.text(
-                        rx.cond(
-                            AppState.resumes.length() == 0,
-                            "Upload a resume on the Resume tab, then add a posting — five live ones are one click away.",
-                            "Add a posting: load five live graduate roles from company job boards, paste your own, or use the fictional samples.",
-                        ),
-                        size="1",
-                        color_scheme="gray",
+                        "Load a pair of sample resumes and some postings, or upload your own. "
+                        "Everything stays in this browser session.",
+                        size="1", color_scheme="gray",
                     ),
-                    spacing="0",
-                    align="start",
+                    spacing="0", align="start",
                 ),
-                rx.spacer(),
-                rx.hstack(
+                width="100%", align="center", spacing="3",
+            ),
+            rx.grid(
+                rx.vstack(
                     rx.button(
-                        rx.icon("file-text", size=14), "Resume",
-                        on_click=AppState.go("resume"), size="2", variant="soft", color_scheme=ACCENT,
+                        rx.icon("users", size=14), "Load 2 sample resumes",
+                        on_click=AppState.load_sample_resumes,
+                        disabled=AppState.busy, color_scheme=ACCENT, width="100%",
                     ),
-                    rx.button(
-                        rx.icon("download", size=14), "Load live postings",
-                        on_click=AppState.load_live_postings, size="2", color_scheme=ACCENT,
-                        disabled=AppState.busy,
+                    rx.text(
+                        "One ATS-clean, one with a table and a photo (100 vs 50 parsability).",
+                        size="1", color_scheme="gray",
                     ),
-                    spacing="2",
-                    wrap="wrap",
+                    spacing="1", align="start", width="100%",
                 ),
-                width="100%", align="center", spacing="3", wrap="wrap",
+                rx.vstack(
+                    rx.button(
+                        rx.icon("download", size=14), "Load 5 live postings",
+                        on_click=AppState.load_live_postings,
+                        disabled=AppState.busy, color_scheme=ACCENT, width="100%",
+                    ),
+                    rx.text(
+                        "Current Australian graduate roles, fetched from company job boards now.",
+                        size="1", color_scheme="gray",
+                    ),
+                    spacing="1", align="start", width="100%",
+                ),
+                rx.vstack(
+                    rx.button(
+                        rx.icon("file-text", size=14), "Load sample postings",
+                        on_click=AppState.load_sample_postings,
+                        disabled=AppState.busy, variant="outline", color_scheme="gray", width="100%",
+                    ),
+                    rx.text(
+                        "Three fictional postings that ship with the project — instant, and never stale.",
+                        size="1", color_scheme="gray",
+                    ),
+                    spacing="1", align="start", width="100%",
+                ),
+                columns=rx.breakpoints(initial="1", md="3"),
+                spacing="3", width="100%",
+            ),
+            rx.hstack(
+                rx.icon("upload", size=13, color=rx.color("gray", 9)),
+                rx.text("Or upload your own resume on the", size="1", color_scheme="gray"),
+                rx.link(
+                    "Resume tab",
+                    on_click=AppState.go("resume"),
+                    size="1", weight="medium", cursor="pointer", color=rx.color(ACCENT, 11),
+                ),
+                rx.text("and paste a posting on", size="1", color_scheme="gray"),
+                rx.link(
+                    "Job postings",
+                    on_click=AppState.go("postings"),
+                    size="1", weight="medium", cursor="pointer", color=rx.color(ACCENT, 11),
+                ),
+                spacing="1", align="center", wrap="wrap",
             ),
             background=rx.color(ACCENT, 2),
             border=f"1px solid {rx.color(ACCENT, 6)}",
@@ -512,7 +554,7 @@ def hero() -> rx.Component:
 def overview_section() -> rx.Component:
     return rx.vstack(
         page_header("Overview", "Where this resume stands against the postings you've added this session."),
-        first_run_banner(),
+        quick_start(),
         hero(),
         selection_bar(),
         rx.grid(
@@ -640,6 +682,22 @@ def resume_section() -> rx.Component:
                     on_change=AppState.select_resume,
                     width="100%",
                 ),
+                rx.divider(),
+                rx.button(
+                    rx.icon("users", size=14),
+                    "Load 2 sample resumes",
+                    on_click=AppState.load_sample_resumes,
+                    disabled=AppState.busy,
+                    variant="soft",
+                    color_scheme=ACCENT,
+                    width="100%",
+                ),
+                rx.text(
+                    "Fictional people: one ATS-clean layout, one with a skills table, a photo "
+                    "and a running header. Handy for showing the tool without uploading a real CV.",
+                    size="1",
+                    color_scheme="gray",
+                ),
             ),
             card(
                 card_title(
@@ -669,12 +727,47 @@ def resume_section() -> rx.Component:
             spacing="4",
             width="100%",
         ),
-        card(
-            card_title(
-                "Extracted skills", "tags", "What the matcher will compare against a posting",
-                trailing=rx.badge(AppState.resume_skill_count.to_string() + " mentions", variant="surface", color_scheme="gray"),
+        rx.grid(
+            card(
+                card_title("Page one", "image", "What the uploaded file actually looks like"),
+                rx.cond(
+                    AppState.resume_preview != "",
+                    rx.box(
+                        rx.image(
+                            src=AppState.resume_preview,
+                            width="100%",
+                            height="auto",
+                            border_radius="8px",
+                            border=f"1px solid {rx.color(SURFACE, 6)}",
+                        ),
+                        width="100%",
+                        max_height="30em",
+                        overflow_y="auto",
+                        border_radius="8px",
+                    ),
+                    empty_hint(
+                        "No preview for this resume — previews are rendered for PDFs only, "
+                        "and DOCX files have no page layout until something renders them.",
+                        "file-question",
+                    ),
+                ),
+                rx.text(
+                    "Useful next to the parsability flags: a table or a sidebar is obvious here, "
+                    "and that is exactly what an ATS parser trips on.",
+                    size="1",
+                    color_scheme="gray",
+                ),
             ),
-            chips(AppState.resume_skills, "iris", "No skills extracted yet.", "check"),
+            card(
+                card_title(
+                    "Extracted skills", "tags", "What the matcher will compare against a posting",
+                    trailing=rx.badge(AppState.resume_skill_count.to_string() + " mentions", variant="surface", color_scheme="gray"),
+                ),
+                chips(AppState.resume_skills, "iris", "No skills extracted yet.", "check"),
+            ),
+            columns=rx.breakpoints(initial="1", lg="2"),
+            spacing="4",
+            width="100%",
         ),
         rx.grid(
             card(

@@ -180,3 +180,67 @@ def test_dashboard_counts_are_session_scoped(monkeypatch):
     assert "session_token = %s" in captured["sql"]
     assert captured["params"] == ("abc", "abc", "abc")
     assert stats["skills"] == 14063        # taxonomy size stays global
+
+
+class TestResumePreview:
+    def test_pdf_renders_a_reasonable_png(self, tmp_path):
+        import fitz
+
+        from src.ingestion.preview import render_first_page
+
+        path = tmp_path / "one_page.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 100), "Jane Candidate — Data Analyst")
+        doc.save(str(path))
+        doc.close()
+
+        png = render_first_page(str(path))
+        assert png and png[:8] == b"\x89PNG\r\n\x1a\n"
+        assert len(png) < 2_000_000
+
+    def test_docx_has_no_preview(self, tmp_path):
+        from src.ingestion.preview import render_first_page
+
+        path = tmp_path / "resume.docx"
+        path.write_bytes(b"not really a docx")
+        assert render_first_page(str(path)) is None
+
+    def test_unreadable_file_never_breaks_the_upload(self, tmp_path):
+        from src.ingestion.preview import render_first_page
+
+        path = tmp_path / "broken.pdf"
+        path.write_bytes(b"%PDF-1.4 truncated nonsense")
+        assert render_first_page(str(path)) is None
+
+
+class TestSampleResumes:
+    """The pair exists to demonstrate the tool without a real CV, and to
+    make the parsability argument visible: same kind of candidate, very
+    different formatting."""
+
+    def test_both_sample_resumes_ship(self):
+        files = sorted(service.SAMPLE_RESUMES_DIR.glob("*.pdf"))
+        assert len(files) == 2
+
+    def test_one_is_ats_clean_and_one_is_not(self):
+        from src.ingestion.ats_parsability import check_parsability
+
+        scores = {
+            path.name: check_parsability(str(path)).score
+            for path in sorted(service.SAMPLE_RESUMES_DIR.glob("*.pdf"))
+        }
+        assert max(scores.values()) == 100, scores
+        assert min(scores.values()) <= 70, scores
+
+    def test_the_messy_one_trips_several_checks(self):
+        from src.ingestion.ats_parsability import check_parsability
+
+        result = check_parsability(str(service.SAMPLE_RESUMES_DIR / "jordan_blake_tables.pdf"))
+        assert result.has_tables and result.has_images and result.has_headers_footers
+
+    def test_sample_people_are_fictional(self):
+        from src.ingestion.extract_text import extract_text
+
+        for path in service.SAMPLE_RESUMES_DIR.glob("*.pdf"):
+            assert "example.com" in extract_text(str(path)), path.name

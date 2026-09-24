@@ -106,6 +106,7 @@ class AppState(rx.State):
 
     # --- resume panel -----------------------------------------------
     resume_file_name: str = ""
+    resume_preview: str = ""      # data URI of page one, "" when unavailable
     resume_skill_count: int = 0
     parsability_score: float = 0.0
     parsability_flags: list[str] = []
@@ -309,6 +310,7 @@ class AppState(rx.State):
             if resume_id != self.resume_id:
                 return  # selection moved on while this was in flight
             self.resume_file_name = summary.get("file_name", "")
+            self.resume_preview = summary.get("preview", "")
             self.parsability_score = summary.get("parsability", 0.0)
             self.parsability_flags = summary.get("flags", [])
             self.resume_skill_count = summary.get("skills", 0)
@@ -525,6 +527,31 @@ class AppState(rx.State):
             self.busy, self.status = False, ""
             self.status_note = f"Loaded {count} postings into this session."
         return AppState.refresh_details
+
+    @rx.event(background=True)
+    async def load_sample_resumes(self):
+        """Two fictional resumes: one ATS-clean, one full of the layout
+        choices that break parsers."""
+        token = self.session_token
+        async with self:
+            self.busy = True
+            self.error = ""
+            self.status = "Loading two sample resumes…"
+        try:
+            count = await asyncio.to_thread(service.load_sample_resumes, token)
+            resumes = await asyncio.to_thread(service.list_resumes, token)
+        except Exception as exc:  # noqa: BLE001
+            async with self:
+                self.busy, self.status = False, ""
+                self.error = f"Could not load the sample resumes: {exc}"
+            return
+        async with self:
+            self.resumes = resumes
+            if resumes:
+                self.resume_id = resumes[0]["id"]
+            self.busy, self.status = False, ""
+            self.status_note = f"Loaded {count} sample resumes into this session."
+        return [AppState.refresh_resume_summary, AppState.refresh_details, AppState.refresh_dashboard]
 
     @rx.event(background=True)
     async def load_sample_postings(self):
