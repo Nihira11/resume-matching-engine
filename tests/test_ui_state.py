@@ -22,6 +22,7 @@ from resume_matcher.state import AppState  # noqa: E402
 
 VIEW = {
     "final_score": 40.7, "verdict": "Likely reject", "verdict_color": "tomato",
+    "fit_band": "Strong fit", "percentile_label": "top 5% of the 40-posting calibration set",
     "components": [{"key": "skill_overlap", "label": "Skill overlap", "help": "h", "score": 44.4, "weight_pct": 44, "contribution": 19.7}],
     "dropped": ["Experience"],
     "matched_required": ["SQL"], "matched_preferred": [], "missing_required": ["Power BI"], "missing_preferred": [],
@@ -75,6 +76,7 @@ def test_apply_view_fills_every_var_the_page_renders():
     assert s.gaps[0].skill_name == "Power BI" and s.gaps[0].mentions == 3
     assert s.missing_required == ["Power BI"] and s.keyword_matched == 9
     assert s.title_note == "note" and s.experience_note == "exp note"
+    assert s.fit_band == "Strong fit" and "calibration set" in s.percentile_label
 
 
 def test_score_button_disabled_until_both_sides_chosen():

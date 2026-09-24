@@ -29,9 +29,35 @@ import json
 from collections import Counter
 from pathlib import Path
 
+import re
+
 from src.ingestion.extract_text import clean_text, extract_text
 from src.matching.bm25_scorer import tokenize
 from src.matching.config import BM25_CORPUS_STATS_PATH
+
+# The corpus is 2,484 real resumes. Document frequencies are aggregate and
+# the stats file ships with the repo, but the *vocabulary* is not
+# anonymous by default: a first scrub of it turned up 59 real phone
+# numbers. They carry no signal either -- no job posting queries a phone
+# number -- so anything shaped like a contact detail is dropped before the
+# file is written.
+_EMAIL = re.compile(r"^[^@\s]+@[^@\s]+$")
+_DIGITS = re.compile(r"\d")
+
+
+def is_identifier_like(token: str) -> bool:
+    """Contact details, not just anything numeric.
+
+    Nine or more digits is a phone number, not a date: "2014-2015" has
+    eight and is a real (if useless) term, while "864-472-7092" has ten.
+    A bare run of five or more digits is a postcode or an employee id.
+    """
+    if _EMAIL.match(token):
+        return True
+    digits = len(_DIGITS.findall(token))
+    if token.isdigit():
+        return digits >= 5
+    return digits >= 9
 
 DEFAULT_CORPUS_DIR = Path("data/raw/kaggle_resumes")
 
@@ -78,10 +104,15 @@ def build(corpus_dir: Path, output_path: Path, limit: int | None = None) -> dict
     if processed == 0:
         raise SystemExit("no documents could be processed")
 
+    scrubbed = {term: count for term, count in df.items() if not is_identifier_like(term)}
+    dropped = len(df) - len(scrubbed)
+    if dropped:
+        print(f"  dropped {dropped} contact-detail-shaped tokens from the vocabulary")
+
     stats = {
         "n_docs": processed,
         "avgdl": total_length / processed,
-        "df": dict(df),
+        "df": scrubbed,
         "source_dir": str(corpus_dir),
     }
 

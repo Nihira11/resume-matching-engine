@@ -19,6 +19,7 @@ import json
 from dataclasses import asdict, dataclass, field
 
 from src.matching.config import (
+    CALIBRATION_SCORE_DECILES,
     COMPONENT_WEIGHTS,
     VERDICT_BORDERLINE_THRESHOLD,
     VERDICT_PASS_THRESHOLD,
@@ -195,3 +196,32 @@ def persist(match: MatchScore) -> int:
     cur.close()
     conn.close()
     return match_id
+
+def percentile_against_calibration(score_0_to_100: float) -> int:
+    """Where this score sits against the calibration run's distribution.
+
+    Linear interpolation between stored deciles. Reported as "vs the
+    40-posting calibration set" wherever it is shown -- it is a position
+    against one measured distribution, not a claim about the job market.
+    """
+    deciles = CALIBRATION_SCORE_DECILES
+    if score_0_to_100 <= deciles[0]:
+        return 0
+    if score_0_to_100 >= deciles[-1]:
+        return 100
+    for index in range(len(deciles) - 1):
+        low, high = deciles[index], deciles[index + 1]
+        if low <= score_0_to_100 <= high:
+            within = (score_0_to_100 - low) / (high - low) if high > low else 0
+            return round((index + within) * 10)
+    return 100
+
+
+def fit_band(score_0_to_100: float) -> str:
+    """Plain-language band, anchored to the calibrated thresholds so the
+    wording and the verdict can never disagree."""
+    if score_0_to_100 >= VERDICT_PASS_THRESHOLD:
+        return "Strong fit"
+    if score_0_to_100 >= VERDICT_BORDERLINE_THRESHOLD:
+        return "Partial fit"
+    return "Weak fit"

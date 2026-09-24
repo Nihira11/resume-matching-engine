@@ -15,11 +15,13 @@ from __future__ import annotations
 from src.ingestion.jd_pipeline import run as ingest_jd
 from src.ingestion.pipeline import run as ingest_resume
 from src.matching.config import (
+    CALIBRATION_SET_SIZE,
     VERDICT_BORDERLINE_THRESHOLD,
     VERDICT_PASS_THRESHOLD,
 )
 from src.matching.embeddings import load_chunk_vectors
 from src.matching.match_pipeline import PreloadedDocuments, run_match
+from src.matching.score import fit_band, percentile_against_calibration
 from src.matching.profiles import load_jd_profile, load_resume_profile, refresh_is_required
 from src.utils.db import get_connection
 
@@ -256,10 +258,18 @@ def to_view(match) -> dict:
     ]
     components.sort(key=lambda c: c["contribution"], reverse=True)
 
+    # A bare "50 / 100" reads as half marks; on the calibration set it is
+    # the highest score observed. The band and percentile say what the
+    # number means, and the raw score stays on screen next to them.
+    percentile = percentile_against_calibration(match.final_score)
+    top_percent = max(1, 100 - percentile)
+
     return {
         "resume_id": match.resume_id,
         "jd_id": match.jd_id,
         "final_score": match.final_score,
+        "fit_band": fit_band(match.final_score),
+        "percentile_label": f"top {top_percent}% of the {CALIBRATION_SET_SIZE}-posting calibration set",
         "verdict": VERDICT_LABELS.get(match.verdict, match.verdict),
         "verdict_color": VERDICT_COLORS.get(match.verdict, "gray"),
         "components": components,

@@ -114,6 +114,8 @@ class AppState(rx.State):
     # untyped dict state var produces.
     has_result: bool = False
     final_score: float = 0.0
+    fit_band: str = ""
+    percentile_label: str = ""
     verdict: str = ""
     verdict_color: str = "gray"
     components: list[ComponentRow] = []
@@ -190,6 +192,8 @@ class AppState(rx.State):
 
     def _apply_view(self, view: dict) -> None:
         self.final_score = view["final_score"]
+        self.fit_band = view["fit_band"]
+        self.percentile_label = view["percentile_label"]
         self.verdict = view["verdict"]
         self.verdict_color = view["verdict_color"]
         self.components = [ComponentRow(**c) for c in view["components"]]

@@ -1,33 +1,37 @@
-# UI 
-reflex==0.9.6.post1
+# UI
+reflex==0.9.12          # pinned: 0.9 removed rx.Base and implicit setters,
+                        # and rejects background upload handlers (docs/UI.md)
 
-# DB 
-psycopg2-binary>=2.9
-pgvector>=0.2.5
-sqlalchemy>=2.0
+# DB
+psycopg2-binary>=2.9    # pgvector columns are written as text, so the
+                        # pgvector Python package is not needed
 
-# Parsing 
+# Parsing
 pdfplumber>=0.11
 python-docx>=1.1
-PyMuPDF>=1.24          # used for layout/column/table detection (ATS parsability check)
+PyMuPDF>=1.24           # PDF fallback when pdfplumber finds no text layer,
+                        # and image detection for the ATS parsability check
 
-# NLP 
-spacy>=3.7
+# NLP
+spacy>=3.7              # tokenizer + PhraseMatcher only; extraction runs on
+                        # spacy.blank("en"), so no trained pipeline is needed
+                        # at runtime (see src/nlp/extract_entities.py)
 sentence-transformers>=3.0
-rank-bm25>=0.2.2
-scikit-learn>=1.4
 
-# Data 
-pandas>=2.2
+# HTTP (Adzuna search, company job-board APIs)
+httpx>=0.27
+
+# Data
 numpy>=1.26
-requests>=2.32
 python-dotenv>=1.0
 
-# LLM (rewrite suggestions) 
-anthropic>=0.34
-
-# Testing 
+# Testing
 pytest>=8.0
 
-# After installing, run:
-# python -m spacy download en_core_web_lg
+# Deliberately absent:
+#   rank-bm25   -- BM25 is implemented directly; the library cannot score a
+#                  document outside its indexed corpus, which is exactly the
+#                  requirement here (src/matching/bm25_scorer.py)
+#   scikit-learn, pandas, requests, sqlalchemy, anthropic
+#               -- listed during scaffolding, never imported. The Anthropic
+#                  rewrite feature is a stretch goal that has not been built.

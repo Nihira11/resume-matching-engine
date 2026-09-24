@@ -11,7 +11,20 @@ Nothing in here is claimed to be optimal. The starting values are
 reasoned defaults; the point of calibration is to replace them with numbers
 that have evidence behind them.
 """
+
 from __future__ import annotations
+
+import os
+from pathlib import Path
+
+# Data files are addressed from the repo root, never from the working
+# directory. Reflex runs the app with app/ as its cwd, so relative paths
+# silently missed both the BM25 corpus statistics and the ESCO adjacency
+# files -- the keyword component dropped out of the blend and gap
+# analysis lost its "related skills" suggestions, with no error anywhere.
+# DATA_ROOT can be overridden for containers that lay the tree out
+# differently.
+DATA_ROOT = Path(os.environ.get("DATA_ROOT", Path(__file__).resolve().parents[2]))
 
 # ---------------------------------------------------------------------
 # Blend weights
@@ -128,7 +141,7 @@ NO_TITLE_ON_RESUME_SCORE = 0.5
 # ---------------------------------------------------------------------
 BM25_K1 = 1.5
 BM25_B = 0.75
-BM25_CORPUS_STATS_PATH = "data/processed/bm25_corpus_stats.json"
+BM25_CORPUS_STATS_PATH = str(DATA_ROOT / "data/processed/bm25_corpus_stats.json")
 BM25_MIN_TOKEN_LEN = 3
 BM25_MAX_QUERY_TERMS = 60
 # Query terms must appear in at least this many corpus resumes. A term no
@@ -207,11 +220,26 @@ SEMANTIC_CEILING = 0.45
 VERDICT_PASS_THRESHOLD = 37.0
 VERDICT_BORDERLINE_THRESHOLD = 30.0
 
+# Score deciles from the same 40-posting calibration run, used to express
+# a score as a percentile against a fixed reference.
+#
+# The blend is honest but reads badly on its own: 100 would require
+# matching every extracted skill, every distinctive keyword, the exact
+# title and seniority, and near-identical semantics, which no real pair
+# does. Good fits landed at 32-50, so "50/100" invites the reader to
+# think "half marks" when it is in fact the top of the observed range.
+#
+# A fixed reference, not a running distribution over whatever happens to
+# be in the database: percentiles that drift as postings are added would
+# make two screenshots of the same pair disagree.
+CALIBRATION_SCORE_DECILES = [9.4, 22.5, 24.9, 27.5, 28.2, 30.0, 32.0, 32.9, 36.3, 40.1, 50.2]
+CALIBRATION_SET_SIZE = 40
+
 # ---------------------------------------------------------------------
 # Gap analysis
 # ---------------------------------------------------------------------
-ESCO_RELATIONS_PATH = "data/taxonomy/esco_occupation_skill_relations.csv"
-ESCO_SKILLS_PATH = "data/taxonomy/esco_skills.csv"
+ESCO_RELATIONS_PATH = str(DATA_ROOT / "data/taxonomy/esco_occupation_skill_relations.csv")
+ESCO_SKILLS_PATH = str(DATA_ROOT / "data/taxonomy/esco_skills.csv")
 MAX_ADJACENT_SUGGESTIONS = 3  # per missing skill
 # Two skills sharing a single ESCO occupation means little; the raw
 # co-occurrence set linked Python to "3d lighting". Requiring the pair to

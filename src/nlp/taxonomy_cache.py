@@ -16,9 +16,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from src.matching.config import DATA_ROOT
 from src.utils.db import get_connection
 
-CACHE_PATH = Path("data/processed/skills_taxonomy_cache.json")
+CACHE_PATH = DATA_ROOT / "data/processed/skills_taxonomy_cache.json"
 
 
 def _signature() -> list[int]:

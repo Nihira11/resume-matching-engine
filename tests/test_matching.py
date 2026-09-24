@@ -437,3 +437,95 @@ class TestJDMinYearsRealPostings:
     def test_decimal_not_misread(self):
         # the "8" in "6.8" used to match on its own
         assert extract_jd_min_years("6.8 years of experience") != 8
+
+
+class TestDataPathsAreRootRelative:
+    """Regression: Reflex runs the app from app/, and these paths used to be
+    relative to the working directory. Both files silently went missing —
+    BM25 dropped out of the blend and gap analysis lost its adjacency
+    suggestions — with no error raised anywhere."""
+
+    def test_data_paths_do_not_depend_on_the_working_directory(self):
+        from pathlib import Path
+
+        from src.matching.config import (
+            BM25_CORPUS_STATS_PATH,
+            ESCO_RELATIONS_PATH,
+            ESCO_SKILLS_PATH,
+        )
+        from src.nlp.taxonomy_cache import CACHE_PATH
+
+        for path in (BM25_CORPUS_STATS_PATH, ESCO_SKILLS_PATH, ESCO_RELATIONS_PATH, CACHE_PATH):
+            assert Path(path).is_absolute(), f"{path} is relative to the cwd"
+
+    def test_bm25_corpus_statistics_ship_with_the_repo(self):
+        # the keyword component is silently dropped without them, and they
+        # cannot be rebuilt without the (undistributable) Kaggle corpus
+        from pathlib import Path
+
+        from src.matching.config import BM25_CORPUS_STATS_PATH
+
+        assert Path(BM25_CORPUS_STATS_PATH).exists()
+
+
+class TestScorePresentation:
+    """The blend tops out near 50 on real pairs, so the raw number alone
+    reads as 'half marks'. The band and percentile carry the meaning; both
+    must stay consistent with the calibrated verdict thresholds."""
+
+    def test_band_matches_the_verdict_thresholds(self):
+        from src.matching.config import (
+            VERDICT_BORDERLINE_THRESHOLD,
+            VERDICT_PASS_THRESHOLD,
+        )
+        from src.matching.score import fit_band
+
+        assert fit_band(VERDICT_PASS_THRESHOLD + 1) == "Strong fit"
+        assert fit_band(VERDICT_PASS_THRESHOLD) == "Strong fit"
+        assert fit_band(VERDICT_BORDERLINE_THRESHOLD) == "Partial fit"
+        assert fit_band(VERDICT_BORDERLINE_THRESHOLD - 0.1) == "Weak fit"
+
+    def test_percentile_is_monotonic_and_bounded(self):
+        from src.matching.score import percentile_against_calibration as pct
+
+        assert pct(0) == 0
+        assert pct(100) == 100
+        values = [pct(s) for s in range(0, 101, 5)]
+        assert values == sorted(values)
+
+    def test_top_of_the_calibration_range_is_the_top_percentile(self):
+        from src.matching.config import CALIBRATION_SCORE_DECILES
+        from src.matching.score import percentile_against_calibration as pct
+
+        # 50.2 was the best score observed across 40 postings
+        assert pct(CALIBRATION_SCORE_DECILES[-1]) == 100
+        assert pct(CALIBRATION_SCORE_DECILES[0]) == 0
+
+
+class TestCorpusStatisticsCarryNoContactDetails:
+    """The BM25 stats file ships with the repo and its vocabulary comes from
+    2,484 real resumes. Aggregate counts are fine to publish; the phone
+    numbers found in the first version were not, and carried no signal
+    either — no posting queries a phone number."""
+
+    def test_identifier_filter_catches_contact_details(self):
+        from scripts.build_bm25_corpus import is_identifier_like
+
+        for token in ("864-472-7092", "01207673477", "8183362640", "sam@example.com", "94040"):
+            assert is_identifier_like(token), token
+
+    def test_identifier_filter_keeps_real_terms(self):
+        from scripts.build_bm25_corpus import is_identifier_like
+
+        for token in ("python", "c++", "node.js", "2014-2015", "sql", "3d"):
+            assert not is_identifier_like(token), token
+
+    def test_shipped_vocabulary_has_no_contact_details(self):
+        import json
+        import re
+
+        from src.matching.config import BM25_CORPUS_STATS_PATH
+
+        vocabulary = json.load(open(BM25_CORPUS_STATS_PATH))["df"]
+        pattern = re.compile(r"\d{3}-\d{3}-\d{4}|\d{10,}|[^@\s]+@[^@\s]+")
+        assert [t for t in vocabulary if pattern.fullmatch(t)] == []

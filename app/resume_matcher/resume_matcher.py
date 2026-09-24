@@ -242,9 +242,9 @@ def sidebar() -> rx.Component:
         ),
         rx.spacer(),
         rx.box(
-            rx.text("Scores are uncalibrated", size="1", weight="medium"),
+            rx.text("Calibrated · 40 postings", size="1", weight="medium"),
             rx.text(
-                "Ordering between postings is the meaningful output, not the absolute number.",
+                "Thresholds separate one candidate's own good/no judgements. Scores compare postings with each other.",
                 size="1",
                 color_scheme="gray",
             ),
@@ -474,7 +474,7 @@ def overview_section() -> rx.Component:
                 ),
             ),
             card(
-                card_title("How the score is built", "layers", "Weights are provisional until calibration"),
+                card_title("How the score is built", "layers", "Weights reasoned; thresholds calibrated on 40 labelled postings"),
                 rx.vstack(
                     weight_line("Skill overlap", "40%", "skill_overlap", "Taxonomy skills the posting asks for that the resume has"),
                     weight_line("Semantic", "20%", "semantic", "Section-level embedding similarity"),
@@ -772,10 +772,17 @@ def match_section() -> rx.Component:
                 rx.grid(
                     card(
                         rx.hstack(
-                            donut(AppState.final_score.to_string(), "out of 100", AppState.score_ring_css),
+                            donut(AppState.final_score.to_string(), "blended score", AppState.score_ring_css),
                             rx.vstack(
-                                rx.badge(AppState.verdict, color_scheme=AppState.verdict_color, variant="solid", size="2", radius="full"),
-                                rx.text(AppState.selected_jd_label, size="3", weight="bold"),
+                                rx.hstack(
+                                    rx.heading(AppState.fit_band, size="6"),
+                                    rx.badge(AppState.verdict, color_scheme=AppState.verdict_color, variant="solid", size="2", radius="full"),
+                                    spacing="3",
+                                    align="center",
+                                    wrap="wrap",
+                                ),
+                                rx.text(AppState.percentile_label, size="1", color=rx.color(SURFACE, 11)),
+                                rx.text(AppState.selected_jd_label, size="3", weight="bold", margin_top="0.3em"),
                                 rx.text(AppState.selected_resume_label, size="1", color_scheme="gray"),
                                 rx.hstack(
                                     rx.badge(AppState.matched_required.length().to_string() + " matched", color_scheme="grass", variant="soft", radius="full"),

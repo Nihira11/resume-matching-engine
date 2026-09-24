@@ -123,3 +123,17 @@ def test_labels_disambiguate_duplicates():
     labels = [r["label"] for r in service._unique_labels(rows)]
     assert labels == ["Business Analyst — Acme (1)", "Business Analyst — Acme (2)", "Data Analyst — Iress"]
     assert len(set(labels)) == 3
+
+
+def test_view_carries_the_band_and_percentile():
+    view = service.to_view(make_match())
+    assert view["fit_band"] in ("Strong fit", "Partial fit", "Weak fit")
+    assert "calibration set" in view["percentile_label"]
+    # the raw score stays visible next to them, never replaced
+    assert view["final_score"] == 40.7
+
+
+def test_percentile_label_never_claims_top_zero_percent():
+    match = make_match()
+    match.final_score = 99.0
+    assert "top 0%" not in service.to_view(match)["percentile_label"]

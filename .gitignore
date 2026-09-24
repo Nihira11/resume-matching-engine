@@ -14,6 +14,9 @@ data/raw/*
 !data/raw/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
+# aggregate document frequencies only, no corpus text -- required at
+# runtime, and unbuildable without the (gitignored) Kaggle resume corpus
+!data/processed/bm25_corpus_stats.json
 data/taxonomy/*
 !data/taxonomy/.gitkeep
 .cache/
