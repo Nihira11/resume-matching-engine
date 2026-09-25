@@ -18,6 +18,7 @@ from src.matching.config import (
     DEFAULT_SENIORITY_LEVEL,
     NO_TITLE_ON_RESUME_SCORE,
     OVERQUALIFIED_PENALTY_PER_STEP,
+    SENIORITY_FALSE_POSITIVE_PATTERNS,
     SENIORITY_LADDER,
     TITLE_FAMILY_WEIGHT,
     TITLE_NOISE_WORDS,
@@ -27,6 +28,9 @@ from src.matching.config import (
 from src.matching.profiles import JDProfile, ResumeProfile
 
 _WORD_RE = re.compile(r"[a-z][a-z+#.\-]*")
+_SENIORITY_FALSE_POSITIVE_RE = re.compile(
+    "|".join(SENIORITY_FALSE_POSITIVE_PATTERNS), re.IGNORECASE
+)
 
 
 @dataclass
@@ -61,6 +65,9 @@ def detect_seniority(text: str) -> int | None:
     junior one named.
     """
     lowered = f" {(text or '').lower()} "
+    # blank the known collisions first, so "Mid Market" stops reading as
+    # mid-level -- see SENIORITY_FALSE_POSITIVE_PATTERNS
+    lowered = _SENIORITY_FALSE_POSITIVE_RE.sub(" ", lowered)
     found = [
         level for term, level in SENIORITY_LADDER.items()
         if re.search(rf"(?<![a-z]){re.escape(term)}(?![a-z])", lowered)

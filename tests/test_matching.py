@@ -114,6 +114,18 @@ class TestTitleMatch:
     def test_associate_is_not_a_seniority_signal(self):
         assert detect_seniority("Associate Consultant") is None
 
+    def test_market_segments_are_not_seniority_rungs(self):
+        """"Senior Account Executive, Mid Market" is a senior role. Read as
+        mid-level, it drew a smaller underqualified penalty than the senior
+        data roles it was compared against."""
+        assert detect_seniority("Senior Account Executive, Mid Market") == 3
+        assert detect_seniority("Mid-Cap Equity Analyst, Senior") == 3
+        assert detect_seniority("Head Office Administrator") is None
+        # the rung itself still reads, so the narrow fix has not
+        # disarmed the ladder
+        assert detect_seniority("Mid-level Data Analyst") == 2
+        assert detect_seniority("Head of Data") == 5
+
     def test_ordering_same_role_beats_different_role(self):
         jd = make_jd([], title="Data Analyst")
         same = score_title_match(make_resume([], titles=["Data Analyst | Acme"]), jd).score
@@ -410,6 +422,32 @@ class TestJDBoilerplate:
         assert heading_kind("About you:") == "content"
         assert heading_kind("About GloBird Energy") == "boilerplate"
         assert heading_kind("Why RBA?") == "boilerplate"
+
+    def test_strips_scam_warnings_and_application_process(self):
+        """Found on 5 of 62 real postings, all of it reaching the embedder."""
+        from src.matching.jd_sections import strip_boilerplate
+        jd = (
+            "Senior Account Executive\n"
+            "Responsibilities\n"
+            "Manage a pipeline of enterprise accounts.\n"
+            "Meet our team\n"
+            "Our sales professionals come from a wide array of backgrounds.\n"
+            "APPLICANT SAFETY POLICY: FRAUD AND THIRD-PARTY RECRUITERS\n"
+            "We will never ask for bank details or passport numbers.\n"
+        )
+        kept = strip_boilerplate(jd)
+        assert "enterprise accounts" in kept
+        assert "wide array" not in kept
+        assert "passport numbers" not in kept
+
+    def test_fraud_analytics_roles_survive_the_scam_markers(self):
+        """The markers are specific for a reason: a bare "fraud" marker
+        would strip the requirements of a real fraud-analytics role."""
+        from src.matching.jd_sections import heading_kind
+        assert heading_kind("Fraud Analytics") is None
+        assert heading_kind("Fraud and Risk Requirements") == "content"
+        assert heading_kind("APPLICANT SAFETY POLICY: FRAUD AND THIRD-PARTY RECRUITERS") == "boilerplate"
+        assert heading_kind("Application Guidelines") == "boilerplate"
 
     def test_all_boilerplate_falls_back_to_original(self):
         from src.matching.jd_sections import strip_boilerplate

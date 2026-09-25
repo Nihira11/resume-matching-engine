@@ -96,6 +96,24 @@ SENIORITY_LADDER: dict[str, int] = {
 }
 DEFAULT_SENIORITY_LEVEL = 2  # assumed when nothing is detected
 
+# Phrases where a ladder word is not a rung. detect_seniority takes the
+# LOWEST level mentioned, which is right for body text ("reporting to the
+# Director") but wrong when a segment name collides with a rung:
+# "Senior Account Executive, Mid Market" read as mid-level rather than
+# senior, so a senior sales role drew a smaller underqualified penalty
+# than the senior data roles it was being compared against -- one of the
+# things inverting the senior-level structural control.
+#
+# One posting in 62 here, kept narrow on purpose. Same reasoning as
+# leaving "associate" out of the ladder above and AMBIGUOUS_SKILL_TERMS in
+# skill_matcher: strip the known collision, do not weaken the rule.
+SENIORITY_FALSE_POSITIVE_PATTERNS = (
+    r"mid[\s-]*market",       # a B2B customer segment
+    r"mid[\s-]*cap",          # likewise, in finance postings
+    r"head[\s-]*(?:of[\s-]*)?office",
+    r"head[\s-]*count",
+)
+
 # Asymmetric on purpose. A candidate one rung below the advertised level
 # is the failure mode a screen is built to catch; a candidate one rung
 # above is a mild mismatch at worst and often still gets a call.
@@ -164,6 +182,19 @@ JD_BOILERPLATE_HEADING_MARKERS = (
     "what's in it", "in it for you", "about us", "about the company",
     "privacy", "accommodation", "how to apply", "rewards", "equal opportunit",
     "diversity", "inclusion", "employment type", "time type",
+    # Found still reaching the embedder on 5 of 62 real postings: scam
+    # warnings, application-process instructions and "meet our team"
+    # employer copy. The fraud notices are the worst of them -- ~460
+    # characters of text about bank details and passport numbers, which
+    # becomes a JD chunk that no resume can cover and that every resume
+    # is equally far from.
+    #
+    # Deliberately specific. A bare "fraud" marker would strip the
+    # requirements of the genuine fraud-analytics and payments-risk roles
+    # in this corpus, which is a far worse error than keeping a notice.
+    "applicant safety", "third-party recruiter", "third party recruiter",
+    "recruitment scam", "application guidelines", "meet our team",
+    "meet the team",
 )
 JD_CONTENT_HEADING_MARKERS = (
     "responsibilit", "requirement", "what you'll", "what you will", "you will",
