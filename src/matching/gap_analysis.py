@@ -10,17 +10,25 @@ require that this candidate already has?" -- which turns a flat "you're
 missing Airflow" into "you're missing Airflow, but you have Luigi and
 cron-based scheduling, so lead with those".
 
-Degrades gracefully: if the CSVs are not present locally the adjacency
-lookup returns nothing and the rest of the gap analysis is unaffected.
+Reads a committed, gzipped cache of the derived map by preference; the
+CSVs are only parsed when that is missing. The CSVs are 36MB and
+ESCO-licensed so they are gitignored, which meant every deployment lost
+this feature silently until the cache existed.
+
+Degrades gracefully: with neither cache nor CSVs the adjacency lookup
+returns nothing and the rest of the gap analysis is unaffected.
 """
 from __future__ import annotations
 
 import csv
+import gzip
+import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.matching.config import (
+    ESCO_ADJACENCY_CACHE_PATH,
     ESCO_RELATIONS_PATH,
     ESCO_SKILLS_PATH,
     MAX_ADJACENT_SUGGESTIONS,
@@ -63,6 +71,22 @@ def _load_adjacency() -> dict[str, set[str]]:
         return _adjacency
 
     _adjacency = {}
+
+    # Prefer the committed cache. The CSVs are gitignored, so outside a
+    # development machine that has downloaded them this is the only path
+    # that produces suggestions at all -- see ESCO_ADJACENCY_CACHE_PATH.
+    cache_path = Path(ESCO_ADJACENCY_CACHE_PATH)
+    if cache_path.exists():
+        try:
+            with gzip.open(cache_path, "rt", encoding="utf-8") as handle:
+                _adjacency = json.load(handle)
+            return _adjacency
+        except (OSError, ValueError) as error:
+            # a corrupt cache falls through to the CSVs rather than
+            # taking the feature down
+            print(f"adjacency cache unreadable ({error}); falling back to the CSVs")
+            _adjacency = {}
+
     skills_path = Path(ESCO_SKILLS_PATH)
     relations_path = Path(ESCO_RELATIONS_PATH)
     if not skills_path.exists() or not relations_path.exists():

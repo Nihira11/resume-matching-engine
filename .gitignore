@@ -17,6 +17,9 @@ data/processed/*
 # aggregate document frequencies only, no corpus text -- required at
 # runtime, and unbuildable without the (gitignored) Kaggle resume corpus
 !data/processed/bm25_corpus_stats.json
+# derived ESCO adjacency map: the CSVs it comes from are 36MB and
+# ESCO-licensed, so the derived map is what ships (scripts/build_adjacency_cache.py)
+!data/processed/esco_adjacency.json.gz
 data/taxonomy/*
 !data/taxonomy/.gitkeep
 .cache/
@@ -32,3 +35,6 @@ venv.nosync/
 data/jds/
 # resumes uploaded through the UI: personal data, stays local
 app/uploaded_files/
+
+# deploy staging tree (scripts/prepare_deploy.py)
+build/

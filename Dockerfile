@@ -40,14 +40,12 @@ COPY data/processed/bm25_corpus_stats.json ./data/processed/
 # The quick-start loaders on the overview page read these at runtime.
 COPY data/samples/ ./data/samples/
 
-# ESCO relations drive the "related skills" suggestions in gap analysis.
-# They are gitignored (37MB) so a clean clone has only the .gitkeep, and
-# the copy still succeeds -- load_adjacency() returns an empty map when
-# the files are absent and every suggestion silently disappears. That is
-# the same failure DATA_ROOT was introduced to stop, so if suggestions
-# matter in the deployed app, fetch the CSVs before building and check
-# the feature after deploying rather than assuming it works.
-COPY data/taxonomy/ ./data/taxonomy/
+# The derived ESCO adjacency map, which drives the "related skills"
+# suggestions in gap analysis. Ships instead of data/taxonomy/*.csv: those
+# are 36MB and gitignored under ESCO's licence, so a clean clone had
+# nothing to copy and load_adjacency() returned an empty map with no error
+# anywhere. See scripts/build_adjacency_cache.py.
+COPY data/processed/esco_adjacency.json.gz ./data/processed/
 
 # Last, because app code changes most often and everything above caches.
 # .dockerignore keeps app/uploaded_files (real resumes) and app/.web

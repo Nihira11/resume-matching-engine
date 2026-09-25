@@ -271,6 +271,16 @@ CALIBRATION_SET_SIZE = 40
 # ---------------------------------------------------------------------
 ESCO_RELATIONS_PATH = str(DATA_ROOT / "data/taxonomy/esco_occupation_skill_relations.csv")
 ESCO_SKILLS_PATH = str(DATA_ROOT / "data/taxonomy/esco_skills.csv")
+# The adjacency map derived from the two CSVs above, gzipped. Built by
+# scripts/build_adjacency_cache.py and committed, because the CSVs
+# themselves are not: they are 36MB and ESCO-licensed, so every deployment
+# lost the "related skills" suggestions silently -- the container had no
+# CSVs to read, and Reflex Cloud rejects the 26.7MB relations file outright
+# (its per-file limit is 25MiB).
+#
+# The cache is 3.9MB and loads in 0.26s against 1.7s to parse the CSVs, so
+# it is also the faster path in development. Byte-identical output.
+ESCO_ADJACENCY_CACHE_PATH = str(DATA_ROOT / "data/processed/esco_adjacency.json.gz")
 MAX_ADJACENT_SUGGESTIONS = 3  # per missing skill
 # Two skills sharing a single ESCO occupation means little; the raw
 # co-occurrence set linked Python to "3d lighting". Requiring the pair to
