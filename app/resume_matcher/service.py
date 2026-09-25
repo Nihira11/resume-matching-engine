@@ -256,9 +256,14 @@ def board_row(resume_id: int, jd: dict) -> dict:
     }
 
 
-def rank_all(resume_id: int) -> list[dict]:
-    """Score one resume against every stored posting, best first."""
-    rows = [board_row(resume_id, jd) for jd in list_jds()]
+def rank_all(resume_id: int, session_token: str) -> list[dict]:
+    """Every posting in this session, scored and ordered best first.
+
+    The UI does not use this -- it calls board_row per posting so the
+    table fills in as results land -- but scripts and any future batch
+    path want the whole list in one call.
+    """
+    rows = [board_row(resume_id, jd) for jd in list_jds(session_token)]
     return sorted(rows, key=lambda r: r["score"], reverse=True)
 
 
