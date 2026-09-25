@@ -72,6 +72,35 @@ model is installed: extraction runs on `spacy.blank("en")`, saving the
 - **`DATA_ROOT`** overrides where those files are looked up, for images
   that lay the tree out differently.
 
+## Build context: two problems found by reading the Dockerfile
+
+Docker has still never been run here, so these came out of a read rather
+than a build. Both were real, and both are fixed.
+
+**`COPY app/ ./app/` would have baked real resumes into the image.**
+Docker does not read `.gitignore`, so `app/uploaded_files/` — 532KB of
+resumes people uploaded through the UI, with their names, phone numbers
+and addresses — was inside the build context, along with `app/.web/`,
+179MB of `node_modules` that `reflex init` regenerates anyway. There is
+now a `.dockerignore`; it is the single most important file for this
+deployment and the reason to check the image contents after the first
+build rather than trusting the layer list:
+
+```bash
+docker run --rm resume-matcher ls /app/app          # expect no uploaded_files
+docker run --rm resume-matcher du -sh /app/app/.web # expect a fresh build only
+```
+
+**The ESCO relation files were not copied at all.** Gap analysis reads
+them at runtime, and `load_adjacency()` returns an empty map when they are
+missing — so "related skills" suggestions would have silently disappeared
+in the container with nothing in the logs. This is the same failure that
+`DATA_ROOT` was introduced to stop, in a new place. `data/taxonomy/` is
+now copied, but the CSVs are gitignored (37MB, ESCO licence), so a clean
+clone copies only the `.gitkeep` and the feature degrades quietly. Fetch
+them before building if suggestions matter, and check the feature in the
+deployed app rather than assuming.
+
 ## Local build
 
 Docker is not installed on the development machine, so the Dockerfile has
@@ -87,7 +116,10 @@ Expect the first build to take several minutes, mostly torch.
 
 ## What would need doing, in order
 
-1. Build the image locally and fix whatever the build surfaces.
+0. Install Docker. Nothing below can be verified without it, and the two
+   problems above were found by reading, which does not generalise.
+1. Build the image locally and fix whatever the build surfaces. Then check
+   the image for uploaded resumes, using the commands above.
 2. Deploy to Fly.io or Reflex Cloud, with `DATABASE_URL` set as a secret.
 3. Re-check timings from the deployed region; if the database is far from
    the app, move one of them — round trips dominate, and the first score

@@ -1,0 +1,62 @@
+# Docker does not read .gitignore, so everything excluded from the repo
+# has to be excluded again here. Two entries below are the reason this
+# file exists at all:
+#
+#   app/uploaded_files/  -- resumes people uploaded through the UI. Real
+#                           names, phone numbers and addresses. Baking
+#                           them into a published image would be the
+#                           worst privacy failure available to this
+#                           project, and `COPY app/ ./app/` does exactly
+#                           that without this line.
+#   app/.web/            -- Reflex's frontend build, 179MB of
+#                           node_modules. `reflex init` regenerates it
+#                           inside the image, so copying it in is both
+#                           wasteful and a recipe for a stale bundle.
+
+app/uploaded_files/
+app/.web/
+app/.states/
+app/reflex.lock
+
+# secrets: DATABASE_URL is passed at runtime, never built in
+.env
+.env.*
+!.env.example
+
+# local environments and caches
+venv.nosync/
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.cache/
+
+# version control and editor state
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
+.ipynb_checkpoints/
+
+# evaluation and documentation: not needed to serve the app.
+# data/samples/ is deliberately NOT here -- the quick-start loaders on the
+# overview page read the two demo resumes and three sample postings out of
+# it at runtime (service.SAMPLES_DIR), so excluding it breaks the feature
+# that lets someone try the app without uploading anything.
+docs/
+tests/
+data/eval/
+data/raw/
+*.log
+*.md
+!README.md
+
+# employer copy we do not republish, and model weights that are
+# downloaded during the build instead
+data/jds/
+*.pt
+*.bin
