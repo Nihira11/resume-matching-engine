@@ -160,18 +160,64 @@ scored against all of them, 240 pairs in total.
 | maybe (10) | 1 | 4 | 5 |
 | no (23) | 0 | 9 | 14 |
 
-Rank correlation with the candidate's judgement: **0.59**. Separation of
+Rank correlation with the candidate's judgement: **0.58** (0.59 before the
+two bug fixes below). Separation of
 "good" from "no": **AUC 0.96**. Leave-one-out band accuracy: **70%**.
 
-**The honest weakness:** domain discrimination is weak (structural AUC
-**0.68**). The engine orders plausible matches well, but cannot reliably
-tell a data role from a sales role — a chef's resume outscores the data
-resume on 1 of 8 unrelated postings, and the data resume wins only 13 of
-21 relevant ones against deliberate mismatches. The likely cause is
-ESCO's generic tail ("communication", "statistics", "project
-management"), which appears in nearly every posting and on nearly every
-resume. Full numbers, including what was deliberately *not* tuned and
-why, are in [`docs/CALIBRATION.md`](docs/CALIBRATION.md).
+**The honest weakness, restated after measuring it properly.** The
+headline structural AUC of **0.68** was originally reported as weak domain
+discrimination and blamed on ESCO's generic tail ("communication",
+"statistics"). Both halves of that were wrong, and the correction is more
+interesting than the original claim.
+
+The pooled 0.68 averages two very different numbers. Split by the
+advertised level of the posting:
+
+| | relevant vs unrelated |
+|---|---|
+| mid-level postings | **AUC 0.97** |
+| senior postings | **AUC 0.33** (inverted) |
+| pooled | 0.68 |
+
+Level and domain are not independent in this label set — the senior
+postings are mostly ones the candidate rejected *because* they were
+senior — so pooling mixes "wrong field" with "too senior" and reports the
+average of a strong signal and an inverted one.
+
+The rest of the gap is the resume, not the engine. Scoring the same 40
+postings against three different resumes:
+
+| resume | pooled | mid | senior |
+|---|---|---|---|
+| the candidate's (history: retail sales, data entry) | 0.68 | 0.97 | 0.33 |
+| a clean data-science graduate resume | **0.86** | **1.00** | 0.43 |
+| a business analyst resume | 0.73 | 0.80 | 0.57 |
+
+Same engine, same postings, same labels. The candidate's own resume leads
+its skills section with *Customer Service* and *Administration* and its
+two extracted job titles are **Retail Sales Assistant** and **Data Entry
+Officer** — so its genuine overlap with sales postings is real content,
+not a taxonomy artifact. Domain discrimination tracks how clearly the
+resume belongs to a domain, which is the correct behaviour for a tool that
+scores the document it is given.
+
+What the investigation did find were two real bugs, both now fixed: scam
+warnings and "meet our team" copy still reaching the embedder on 5 of 62
+postings, and "Senior Account Executive, **Mid** Market" being read as a
+mid-level role because `detect_seniority` takes the lowest rung mentioned.
+
+**Neither fix moves the headline number.** Re-scoring all 280 pairs, the
+pooled AUC moves +0.03, +0.01 and −0.02 across the three resumes — it goes
+*down* on one — and the mid-level figure is identical on all three. That
+is the expected outcome when one posting in 62 carried one bug and five
+carried the other; the fixes are kept because they are correct, not
+because they bought a number. The one control that improved cleanly is the
+contrast-resume ranking, 13 → 14 of 21.
+
+The senior inversion surviving both fixes, on all three resumes, is what
+says the remaining problem is the label design rather than the engine.
+Full numbers, including what was deliberately *not* tuned and why, are in
+[`docs/CALIBRATION.md`](docs/CALIBRATION.md).
 
 ## Getting it running
 
@@ -245,7 +291,9 @@ PostgreSQL + pgvector · spaCy · sentence-transformers (MiniLM) · BM25
 
 - Calibrated on one resume, 40 postings, one labeller. Scores compare
   postings against each other, not against an external standard.
-- Domain discrimination is weak (AUC 0.68) — see above.
+- The senior-level structural control is inverted (AUC 0.33) on every
+  resume tried, so it is an engine or label-design problem rather than a
+  property of one resume — see above. Mid-level discrimination is 0.97.
 - ATS parsability is a coarse four-check subtraction; in practice the
   table check does most of the work.
 - Extraction against a general-purpose taxonomy still produces occasional

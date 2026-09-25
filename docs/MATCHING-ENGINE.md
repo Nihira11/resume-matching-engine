@@ -357,12 +357,16 @@ control against two unrelated resumes, are in `validation-results.md`.
   at now.
 - **BM25 absolute values read low** – see above. Ordering is sound;
   the number isn't meaningful on its own yet.
-- **Domain discrimination is weak.** Calibration measured relevant vs
-  unrelated postings at AUC 0.68 — the engine orders plausible matches
-  well but cannot reliably tell a data role from a sales one. Suspected
-  cause: ESCO's generic competency tail ("communication", "statistics")
-  appears in nearly every posting and resume, giving every pair a floor of
-  overlap. Next fix, and an extraction problem rather than a weighting one.
+- **The senior-level structural control is inverted (AUC 0.33).** The
+  pooled 0.68 first reported here averages 0.97 at mid level with an
+  inverted 0.33 at senior level, and the suspected cause recorded
+  originally — ESCO's generic competency tail — was measured and found not
+  to be it. `communication` is the only term that behaves that way, and
+  skill overlap is the strongest component on this set, not the weakest.
+  The pooled figure also mixes "wrong field" with "too senior", because
+  the label set's senior postings are mostly ones rejected on seniority.
+  See `docs/CALIBRATION.md` for the full correction, including the same
+  measurement across three resumes (0.68 / 0.86 / 0.73).
 - **Thresholds come from 40 postings labelled by one person**, corrected
   from a drafted sheet rather than labelled blind. Leave-one-out band
   accuracy is 70%.

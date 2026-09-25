@@ -163,12 +163,45 @@ def best_threshold(positive: list[float], negative: list[float]) -> tuple[float,
 # ---------------------------------------------------------------------
 # reports
 # ---------------------------------------------------------------------
+def describe_primary_resume() -> None:
+    """What document is actually being scored.
+
+    Printed because the structural control below quietly assumes the
+    primary resume belongs to the "relevant" domain, and for a long time
+    it did not: resume 7's extracted titles are "Retail Sales Assistant"
+    and "Data Entry Officer", which is why sales postings beat data
+    postings on title family. A weak domain AUC was read as an engine
+    fault for several sessions before anyone looked at this.
+    """
+    try:
+        with connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT entity_type, entity_value FROM resume_entities "
+                "WHERE resume_id = %s AND entity_type = 'title' ORDER BY entity_id",
+                (PRIMARY_RESUME,),
+            )
+            titles = [value for _, value in cur.fetchall()]
+    except Exception as error:  # noqa: BLE001 -- a report, not the metric
+        print(f"  (could not read the primary resume's titles: {error})")
+        return
+
+    print(f"\n  primary resume is id {PRIMARY_RESUME}; its extracted titles:")
+    for title in titles or ["(none extracted)"]:
+        print(f"    - {title[:72]}")
+    print("  'relevant' below means relevant to THIS resume. If these titles")
+    print("  are not in the target field, a low domain AUC is the engine")
+    print("  reading the document correctly, not failing.")
+
+
 def report_structural(rows: list[dict], labels: dict[int, dict]) -> None:
     print("\n=== Structural controls (no human labels needed) ===")
     primary = [r for r in rows if r["resume_id"] == PRIMARY_RESUME]
     if not primary:
         print("  no rows for the primary resume")
         return
+
+    describe_primary_resume()
 
     buckets: dict[str, list[float]] = {}
     for row in primary:
@@ -188,6 +221,24 @@ def report_structural(rows: list[dict], labels: dict[int, dict]) -> None:
     if separation is not None:
         print(f"\n  relevant vs unrelated postings: AUC {separation:.2f} "
               f"({'good' if separation > 0.8 else 'weak' if separation > 0.6 else 'no signal'})")
+
+    # Stratified, because the pooled figure above is confounded and was
+    # read as an engine weakness for longer than it should have been.
+    # Level and domain are not independent in this label set: the senior
+    # postings are mostly ones the candidate rejected on seniority, so
+    # pooling mixes "wrong field" with "too senior" and reports the
+    # average of a good number and an inverted one.
+    print("\n  same comparison within each seniority level:")
+    for level in ("entry", "mid", "senior"):
+        pos = [row["final"] for row in primary
+               if (meta := labels.get(row["jd_id"])) and meta["level"] == level
+               and meta["domain"] == "relevant"]
+        neg = [row["final"] for row in primary
+               if (meta := labels.get(row["jd_id"])) and meta["level"] == level
+               and meta["domain"] == "unrelated"]
+        value = auc(pos, neg)
+        detail = "n/a — no contrast in this level" if value is None else f"AUC {value:.2f}"
+        print(f"    {level:7} relevant n={len(pos):2} unrelated n={len(neg):2}  {detail}")
 
     print("\n  does the right resume win each posting? (primary vs contrast resumes)")
     wins = contested = 0

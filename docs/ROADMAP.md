@@ -59,7 +59,7 @@ Full detail in `docs/UI.md`.
 - Sanity-check against the candidate's own judgement — no posting labelled a good fit is rejected, none ruled out passes
 - Calibrate verdict thresholds (70/45 → 37/30) and test 162 weightings; weights kept, for reasons recorded
 - Measure the semantic rescale bounds from the observed distribution ([0.25, 0.75] → [0.15, 0.45])
-- Known weakness, measured and documented: domain discrimination is weak (structural AUC 0.68)
+- Re-measured the one weakness that had been guessed at rather than tested: the pooled structural AUC of 0.68 splits into 0.97 at mid level and an inverted 0.33 at senior level, and rises to 0.86 on a resume that belongs to one domain. The recorded cause ("ESCO's generic tail") was wrong; two real bugs found in its place and fixed, and reported honestly as moving the headline within noise (pooled AUC +0.03 / +0.01 / −0.02 across three resumes) because each affected only a handful of postings
 
 Full detail in `docs/CALIBRATION.md`.
 
