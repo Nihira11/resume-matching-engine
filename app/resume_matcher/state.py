@@ -239,7 +239,7 @@ class AppState(rx.State):
             recent = await asyncio.to_thread(service.recent_matches, resume_id) if resume_id else []
         except Exception as exc:  # noqa: BLE001
             async with self:
-                self.error = f"Could not load the dashboard: {exc}"
+                self.error = f"Could not load the dashboard: {service.safe_error(exc)}"
             return
         async with self:
             self.stat_resumes = stats["resumes"]
@@ -285,7 +285,7 @@ class AppState(rx.State):
             jds = await asyncio.to_thread(service.list_jds, token)
         except Exception as exc:  # noqa: BLE001 -- surfaced in the UI
             async with self:
-                self.error = f"Could not reach the database: {exc}"
+                self.error = f"Could not reach the database: {service.safe_error(exc)}"
             return
         async with self:
             self.resumes = resumes
@@ -399,7 +399,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not parse that resume: {exc}"
+                self.error = f"Could not parse that resume: {service.safe_error(exc)}"
             return
         async with self:
             self.resumes = resumes
@@ -428,7 +428,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not save that posting: {exc}"
+                self.error = f"Could not save that posting: {service.safe_error(exc)}"
             return
         async with self:
             self.jds = jds
@@ -453,7 +453,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Scoring failed: {exc}"
+                self.error = f"Scoring failed: {service.safe_error(exc)}"
             return
         async with self:
             self._apply_view(view)
@@ -484,7 +484,7 @@ class AppState(rx.State):
                 async with self:
                     self.busy, self.status = False, ""
                     label = jd.get("title") or jd.get("label") or f"posting {jd.get('id')}"
-                    self.error = f"Ranking failed on '{label}': {exc}"
+                    self.error = f"Ranking failed on '{label}': {service.safe_error(exc)}"
                 return
             rows.append(row)
             rows.sort(key=lambda r: r["score"], reverse=True)
@@ -518,7 +518,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not load postings: {exc}"
+                self.error = f"Could not load postings: {service.safe_error(exc)}"
             return
         async with self:
             self.jds = jds
@@ -543,7 +543,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not load the sample resumes: {exc}"
+                self.error = f"Could not load the sample resumes: {service.safe_error(exc)}"
             return
         async with self:
             self.resumes = resumes
@@ -568,7 +568,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not load the samples: {exc}"
+                self.error = f"Could not load the samples: {service.safe_error(exc)}"
             return
         async with self:
             self.jds = jds
@@ -590,7 +590,7 @@ class AppState(rx.State):
         except Exception as exc:  # noqa: BLE001
             async with self:
                 self.busy, self.status = False, ""
-                self.error = f"Could not clear the session: {exc}"
+                self.error = f"Could not clear the session: {service.safe_error(exc)}"
             return
         async with self:
             self.resumes, self.jds = [], []

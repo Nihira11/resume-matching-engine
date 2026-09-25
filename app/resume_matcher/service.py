@@ -13,6 +13,8 @@ so the websocket event loop keeps serving.
 from __future__ import annotations
 
 import base64
+import os
+import re
 
 from src.ingestion.jd_pipeline import run as ingest_jd
 from src.ingestion.pipeline import run as ingest_resume
@@ -657,3 +659,26 @@ def purge_expired(ttl_hours: int = SESSION_TTL_HOURS) -> tuple[int, int]:
         conn.commit()
         cur.close()
     return (resumes, postings)
+
+
+# ---------------------------------------------------------------------
+# Error text shown to users
+# ---------------------------------------------------------------------
+# psycopg2 puts the whole connection string into its exceptions, and the
+# UI interpolates exceptions into a banner. On a deployed instance that
+# printed the database DSN -- host, user and password -- to every visitor
+# on the front page. Anything shown to a user goes through here first.
+_CREDENTIAL_URI_RE = re.compile(r"(?P<scheme>[a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/@]*:[^\s/@]*@")
+
+
+def safe_error(exc: Exception | str) -> str:
+    """Exception text with any embedded credentials removed.
+
+    Redacts two things: the userinfo part of any URI (which is how a DSN
+    leaks), and the configured DATABASE_URL should it appear verbatim.
+    """
+    text = str(exc)
+    database_url = os.environ.get("DATABASE_URL", "").strip().strip('"').strip("'")
+    if database_url and database_url in text:
+        text = text.replace(database_url, "[database connection string]")
+    return _CREDENTIAL_URI_RE.sub(r"\g<scheme>[redacted]@", text)

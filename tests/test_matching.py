@@ -567,3 +567,37 @@ class TestCorpusStatisticsCarryNoContactDetails:
         vocabulary = json.load(open(BM25_CORPUS_STATS_PATH))["df"]
         pattern = re.compile(r"\d{3}-\d{3}-\d{4}|\d{10,}|[^@\s]+@[^@\s]+")
         assert [t for t in vocabulary if pattern.fullmatch(t)] == []
+
+
+class TestErrorSanitising:
+    """A deployed instance printed the database DSN, password included, to
+    every visitor via the error banner on the front page."""
+
+    def _safe_error(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
+        from resume_matcher.service import safe_error
+        return safe_error
+
+    def test_strips_credentials_from_a_dsn(self):
+        safe_error = self._safe_error()
+        message = safe_error(
+            'invalid dsn: "postgresql://postgres.abc:sup3rs3cret@db.example.com:5432/postgres"'
+        )
+        assert "sup3rs3cret" not in message
+        assert "postgres.abc" not in message
+        assert "[redacted]" in message
+        # the useful part survives, or the banner is useless
+        assert "db.example.com" in message and "invalid dsn" in message
+
+    def test_leaves_ordinary_errors_alone(self):
+        safe_error = self._safe_error()
+        assert safe_error("could not parse that PDF") == "could not parse that PDF"
+
+    def test_redacts_the_configured_database_url(self, monkeypatch):
+        monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@h:5432/d")
+        safe_error = self._safe_error()
+        assert "postgresql://u:p@h:5432/d" not in safe_error(
+            "connection failed for postgresql://u:p@h:5432/d"
+        )
