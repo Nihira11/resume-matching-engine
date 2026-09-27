@@ -1,6 +1,9 @@
 # UI
-reflex==0.9.12          # pinned: 0.9 removed rx.Base and implicit setters,
-                        # and rejects background upload handlers (docs/UI.md)
+streamlit>=1.40         # replaced Reflex: a stateful websocket framework that
+                        # serialised the whole app state to Redis on every
+                        # click, needed two ports, and spawned one worker per
+                        # CPU*2+1 -- each loading its own copy of the model
+                        # stack. See docs/UI.md.
 
 # DB
 psycopg2-binary>=2.9    # pgvector columns are written as text, so the

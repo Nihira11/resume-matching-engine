@@ -1,0 +1,62 @@
+# Theme. Tokens here rather than CSS: they apply consistently to every
+# element and survive Streamlit upgrades, whereas CSS selectors target
+# internal class names.
+#
+# Light only, deliberately. A [theme.dark] section was tried and removed:
+# defining both makes Streamlit follow the browser's preference, so the
+# app opened dark on a dark-mode machine with no way to force light --
+# Streamlit has no config key for the startup mode. Worse, the custom
+# panel CSS keyed off st.context.theme, so a light/dark mismatch painted
+# dark cards under light chrome.
+#
+# Palette is Tailwind slate + indigo, which is where the professional
+# Streamlit themes converge. The page is tinted and the cards are white,
+# not the other way round: white cards on a white page is why an earlier
+# attempt read as flat, with no edge separating a panel from its
+# background.
+
+[theme]
+base = "light"
+primaryColor = "#4f46e5"              # indigo-600
+backgroundColor = "#f1f4f9"           # tinted page, so white cards lift off it
+secondaryBackgroundColor = "#ffffff"  # cards, widgets, inputs
+codeBackgroundColor = "#f1f5f9"       # slate-100
+textColor = "#0f172a"                 # slate-900
+linkColor = "#4f46e5"
+borderColor = "#e2e8f0"               # slate-200
+showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
+font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+headingFont = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+baseFontSize = 15
+headingFontSizes = ["32px", "25px", "20px", "17px", "15px", "14px"]
+headingFontWeights = [700, 700, 600, 600, 600, 600]
+linkUnderline = false
+
+# Verdict colours: pass / borderline / reject read green / amber / red
+# wherever a badge or metric uses them.
+greenColor = "#059669"
+yellowColor = "#d97706"
+orangeColor = "#ea580c"
+redColor = "#dc2626"
+violetColor = "#4f46e5"
+blueColor = "#0284c7"
+grayColor = "#64748b"
+chartCategoricalColors = ["#4f46e5", "#0ea5e9", "#059669", "#d97706", "#dc2626", "#7c3aed", "#64748b"]
+
+dataframeBorderColor = "#e2e8f0"
+dataframeHeaderBackgroundColor = "#f8fafc"
+
+[theme.sidebar]
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f1f5f9"
+borderColor = "#e2e8f0"
+primaryColor = "#4f46e5"
+dataframeHeaderBackgroundColor = "#f1f5f9"
+
+[server]
+# Resumes are a few hundred KB; the 200MB default invites nothing useful.
+maxUploadSize = 10

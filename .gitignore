@@ -33,8 +33,14 @@ data/taxonomy/*
 venv.nosync/
 # pasted job postings: employer copy, not ours to republish
 data/jds/
-# resumes uploaded through the UI: personal data, stays local
-app/uploaded_files/
+# resumes uploaded through the UI: personal data, stays local.
+# streamlit_app.py deletes each file straight after parsing -- the text
+# and the preview live in the database -- but the directory is ignored
+# so a crash between write and unlink cannot leak one into git.
+data/uploads/
 
 # deploy staging tree (scripts/prepare_deploy.py)
 build/
+
+.agents/
+.claude/
