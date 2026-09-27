@@ -10,9 +10,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
 
-from resume_matcher import service  # noqa: E402
+from src import service  # noqa: E402
 from src.matching.score import MatchScore  # noqa: E402
 
 

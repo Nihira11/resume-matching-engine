@@ -574,10 +574,7 @@ class TestErrorSanitising:
     every visitor via the error banner on the front page."""
 
     def _safe_error(self):
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "app"))
-        from resume_matcher.service import safe_error
+        from src.service import safe_error
         return safe_error
 
     def test_strips_credentials_from_a_dsn(self):
