@@ -1,128 +1,89 @@
 # Deployment
 
-Status: **not deployed.** A `Dockerfile` is in the repo, the app runs
-locally, and the access model that previously blocked deployment is now
-in place. What follows is what deploying it would cost and what is left
-to check.
+Target: **Streamlit Community Cloud** — free, no credit card, deploys from
+a GitHub repo, and needs no Docker.
 
-## Access model: session scoping
+## Steps
 
-Resumes carry names, phone numbers and addresses, so the original
-behaviour — one shared dropdown listing every resume ever uploaded — was
-the thing that made this undeployable.
+1. Push this repo to GitHub (public, or private with Streamlit granted
+   access).
+2. Go to <https://share.streamlit.io> and sign in with GitHub.
+3. **New app** → pick the repo and branch → main file `streamlit_app.py`.
+4. **Advanced settings → Secrets**, paste:
 
-Now (`db/migrations/003_session_scoping.sql`):
+   ```toml
+   DATABASE_URL = "postgresql://postgres.xxx:PASSWORD@aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres"
+   ```
 
-- every resume and posting is stamped with the Reflex client token
-- the UI lists only rows carrying the current session's token, and a
-  missing token lists nothing rather than everything
-- the dashboard counts are scoped the same way, so a visitor is never
-  told there are 41 postings when they added two
-- **Delete my data now** removes a session's rows immediately, and a TTL
-  sweep (24h, `service.purge_expired`) removes what nobody deleted
+   Percent-encode any special characters in the password (`&` → `%26`,
+   `@` → `%40`, `#` → `%23`). Streamlit exposes secrets as environment
+   variables, which is what `src/utils/db.py` reads.
+5. Deploy. The first build installs torch and downloads MiniLM, so expect
+   several minutes.
 
-What this is not: an account system. There is no login, and anyone who
-recovered a session token could read that session's data. For a public
-demo that is proportionate; for anything holding real applications it is
-not.
-
-**Session data does not disappear when the tab closes.** No such signal
-is dependable — a tab can be killed, a laptop can sleep — so the TTL is
-the mechanism that actually runs, and the UI says so rather than
-implying instant deletion.
-
-## Size
-
-The image is dominated by the model stack:
-
-| Component | Size |
-|---|---|
-| PyTorch (CPU wheel) | ~200MB (the default build is ~400MB; nothing here uses a GPU) |
-| MiniLM weights, baked in at build | 87MB |
-| Reflex + frontend toolchain | ~150MB |
-| Everything else | ~50MB |
-
-Roughly **500MB**, which rules out the smallest free tiers. No spaCy
-model is installed: extraction runs on `spacy.blank("en")`, saving the
-500MB `en_core_web_lg` download that the original scaffold assumed.
-
-## Hosting options
-
-| Option | Fit | Notes |
-|---|---|---|
-| **Reflex Cloud** (`reflex deploy`) | Simplest | Purpose-built for Reflex; check the current tier's image-size and memory limits against ~500MB before committing |
-| **Fly.io** | Good | `fly launch` reads the Dockerfile; 512MB RAM is tight for torch, 1GB is comfortable |
-| **Railway / Render** | Workable | Dockerfile deploys fine; free tiers sleep, and a cold start pays the model load again |
-| **Hugging Face Spaces** | Poor fit | Docker Spaces would work, but the app needs an external Postgres and the free tier is public by default |
-
-## Runtime requirements
+## What the app needs at runtime
 
 - **Postgres with pgvector.** Supabase works; use the session pooler
-  connection string. Note that the pooler adds ~550ms per round trip from
-  outside its region, which dominates scoring time — a first score takes
-  ~20s, most of it waiting on the network. Co-locating the app with the
-  database would help more than any code change.
-- **Environment:** `DATABASE_URL` is required. `ADZUNA_APP_ID` /
-  `ADZUNA_APP_KEY` are optional (posting *search* only).
-- **Data files:** `data/processed/bm25_corpus_stats.json` ships in the
-  repo and is copied into the image. Without it the keyword component is
-  silently dropped. `data/taxonomy/esco_*.csv` are **not** in the repo
-  (ESCO's licence) — without them, gap analysis loses its "related
-  skills" suggestions but everything else works.
-- **`DATA_ROOT`** overrides where those files are looked up, for images
-  that lay the tree out differently.
+  string. Co-locate if you can — round trips dominate scoring time.
+- **`DATABASE_URL`** as a secret. Nothing else is required; the Adzuna
+  keys are optional and only affect posting *search*.
+- **Committed data files**, both small and both already in the repo:
+  `data/processed/bm25_corpus_stats.json` (the keyword component is
+  silently dropped without it) and `data/processed/esco_adjacency.json.gz`
+  (the "related skills" suggestions disappear without it).
 
-## Build context: two problems found by reading the Dockerfile
+`data/taxonomy/*.csv` are **not** needed — they are 36MB and ESCO-licensed,
+so the derived adjacency map ships instead. See
+`scripts/build_adjacency_cache.py`.
 
-Docker has still never been run here, so these came out of a read rather
-than a build. Both were real, and both are fixed.
+## Memory
 
-**`COPY app/ ./app/` would have baked real resumes into the image.**
-Docker does not read `.gitignore`, so `app/uploaded_files/` — 532KB of
-resumes people uploaded through the UI, with their names, phone numbers
-and addresses — was inside the build context, along with `app/.web/`,
-179MB of `node_modules` that `reflex init` regenerates anyway. There is
-now a `.dockerignore`; it is the single most important file for this
-deployment and the reason to check the image contents after the first
-build rather than trusting the layer list:
+Roughly 400MB resident once warm:
 
-```bash
-docker run --rm resume-matcher ls /app/app          # expect no uploaded_files
-docker run --rm resume-matcher du -sh /app/app/.web # expect a fresh build only
-```
+| Component | Cost |
+|---|---|
+| PyTorch (CPU wheel) | ~190MB |
+| MiniLM weights | ~110MB |
+| spaCy tokenizer + taxonomy index | ~15MB |
+| ESCO adjacency map | ~70MB |
 
-**The ESCO relation files were not copied at all.** Gap analysis reads
-them at runtime, and `load_adjacency()` returns an empty map when they are
-missing — so "related skills" suggestions would have silently disappeared
-in the container with nothing in the logs. This is the same failure that
-`DATA_ROOT` was introduced to stop, in a new place. `data/taxonomy/` is
-now copied, but the CSVs are gitignored (37MB, ESCO licence), so a clean
-clone copies only the `.gitkeep` and the feature degrades quietly. Fetch
-them before building if suggestions matter, and check the feature in the
-deployed app rather than assuming.
+Community Cloud's allowance is comfortably above that. It was not
+comfortably above the 1.1GB the previous host used, which is the whole
+story below.
 
-## Local build
+## Why not the previous hosts
 
-Docker is not installed on the development machine, so the Dockerfile has
-been written but never built. That is worth stating plainly rather than
-implying it is tested:
+Worth recording, because each was a dead end for a different reason and
+the reasons are not obvious from the marketing pages.
 
-```bash
-docker build -t resume-matcher .
-docker run -p 3000:3000 -p 8000:8000 --env-file .env resume-matcher
-```
+**Hugging Face Spaces** — Docker Spaces now require a PRO subscription.
+Free accounts get static Spaces only. A write token does not change it;
+the API returns `402 Payment Required` at repo creation.
 
-Expect the first build to take several minutes, mostly torch.
+**Reflex Cloud (free tier)** — 1GB RAM, one CPU, suspends when idle,
+~3 minute cold start. The app was OOM-killed four times in 25 minutes.
+The cause was not the app's own footprint: Reflex sizes its worker pool
+as `cpu_count * 2 + 1`, so one CPU meant **three** backend workers, each
+loading its own copy of torch, MiniLM and the skill matcher. `GRANIAN_WORKERS=1`
+fixed the OOM, but cold starts and idle suspension remained, and the
+platform twice got stuck at `pending worker...` needing a manual stop and
+start through its API.
 
-## What would need doing, in order
+Three real bugs were found while chasing that and are fixed regardless of
+host: a 99,400-pattern spaCy `PhraseMatcher` costing 313MB (now a token
+n-gram dict), a 150KB resume preview being serialised to Redis on every
+click (now loaded on demand), and the database password being printed to
+the page in error banners (now redacted by `service.safe_error`).
 
-0. Install Docker. Nothing below can be verified without it, and the two
-   problems above were found by reading, which does not generalise.
-1. Build the image locally and fix whatever the build surfaces. Then check
-   the image for uploaded resumes, using the commands above.
-2. Deploy to Fly.io or Reflex Cloud, with `DATABASE_URL` set as a secret.
-3. Re-check timings from the deployed region; if the database is far from
-   the app, move one of them — round trips dominate, and the first score
-   in a session already takes ~55s while models load.
-4. Consider a scheduled sweep rather than the opportunistic one, so a
-   site with no visitors still expires its data on time.
+**Google Cloud Run** would work — 2GB, scales to zero, generous free
+tier — but it requires a billing account with a card even to stay within
+the free tier.
+
+## Checks worth running after deploying
+
+- Open the app in **two tabs**. Session scoping means each gets its own
+  data; neither should see the other's.
+- Load the sample resumes, then a posting, then score. The first score is
+  slow (model load); later ones are seconds.
+- Confirm no connection string appears anywhere on the page if something
+  errors.

@@ -1,128 +1,72 @@
-# UI (Reflex)
+# UI
 
-Status: working end-to-end against the live pipeline — upload or pick a
-resume, pick or paste a posting, score it, read the breakdown, or rank one
-resume against every stored posting.
+Streamlit, in `streamlit_app.py`. Five sections — Overview, Resume, Job
+postings, Match results, Leaderboard — selected from a sidebar radio, so
+each page answers one question instead of one long scroll answering all
+of them.
+
+Run it:
 
 ```bash
-cd app
-reflex run          # http://localhost:3000
+streamlit run streamlit_app.py
 ```
 
-## Shape
+## Why not Reflex
 
-Three files, split by what they depend on:
+The UI was Reflex until the project tried to deploy it. Reflex is a good
+framework; it is a poor fit for an app whose backend holds a 400MB model
+stack, and four separate failures traced back to that mismatch:
 
-| File | Role | Depends on |
-|---|---|---|
-| `service.py` | pipeline calls + shaping results for display | `src/`, the database |
-| `state.py` | Reflex state, event handlers, typed row models | `service.py` |
-| `resume_matcher.py` | components and layout | `state.py` |
-
-`service.py` exists so the display logic is testable without a Reflex app
-context: `tests/test_ui_service.py` pushes a hand-built `MatchScore`
-through the same formatter the page uses, so a field renamed in the engine
-fails a test instead of silently rendering blank.
-`tests/test_ui_state.py` drives the event handlers with the pipeline
-stubbed — selection, validation, busy/error handling, and result mapping —
-with no database, no spaCy and no embedding model.
-
-## Decisions
-
-**Everything slow runs as a background event.** First score loads spaCy's
-large model, builds the ~14k-term PhraseMatcher and loads MiniLM, then
-embeds and writes chunks to pgvector. A normal handler would block the
-websocket and freeze the page for the better part of a minute. Handlers
-set `busy` and a `status` line naming the stage, then do the blocking work
-in `asyncio.to_thread`.
-
-**Upload is the exception**, because Reflex rejects a background upload
-handler outright — the file has to be read while the request is alive. So
-`handle_resume_upload` saves the bytes and returns
-`AppState.process_resume(path)`, which is the background half.
-
-**State vars are flat and typed, not one result dict.** `rx.foreach`
-cannot iterate a var it only knows as `Any`, which is exactly what
-indexing an untyped `dict` state var produces. Rows are plain dataclasses
-(`ComponentRow`, `GapRow`, `BoardRow`) — `rx.Base` was removed in Reflex
-0.9.
-
-**The verdict is shown with its caveat attached.** Thresholds are
-uncalibrated and every real posting scored so far lands below "borderline"
-(see `validation-results.md`), so the UI says to compare postings against
-each other rather than trusting one score. Writing the caveat into the
-component is deliberate: the number is the first thing anyone reads.
-
-**Components are listed by contribution, not raw score.** A component
-scoring 50 at 17% weight matters less than one scoring 44 at 44%, and the
-weight is printed next to each bar so the ordering is checkable.
-
-**ATS parsability sits in the resume panel, not the results.** It is a
-property of the file, not of the pair, and folding it into the match score
-would hide that a resume can match perfectly on content and still be
-shredded by a real parser.
-
-## Reflex 0.9 notes
-
-Written against `reflex==0.9.6.post1` (pinned in `requirements.txt`).
-Four API details cost time and will matter on upgrade:
-
-- `rx.Base` is gone; use dataclasses for typed state models.
-- Implicit `set_<var>` handlers are gone; write them explicitly.
-- `segmented_control.on_change` passes `str | list[str]`, so the handler
-  has to accept both.
-- `App(theme=...)` is deprecated in favour of a `RadixThemesPlugin` config
-  in `rxconfig.py`; still functional, worth moving before 1.0.
-
-`rxconfig.py` puts the repo root on `sys.path` so the app can import
-`src/` while Reflex runs from `app/`.
-
-## Speed
-
-The database is hosted and every query costs ~550ms round trip, which
-dominated everything: a single score took 39s and ranking 13 postings took
-8 minutes. Four changes, none of which alter a score:
-
-| Change | Where |
+| Symptom | Cause |
 |---|---|
-| Pooled connections instead of connect-per-call | `src/utils/db.py` |
-| One batched UPDATE instead of one per skill | `profiles.refresh_is_required` |
-| `run_match(preloaded=…)` accepts profiles/vectors the caller holds | `match_pipeline.py` |
-| Per-session cache of profiles, vectors and requirement refreshes | `service.py` |
+| Backend OOM-killed repeatedly on a 1GB host | `get_num_workers()` returns `cpu_count * 2 + 1`. One CPU meant **three** workers, each loading its own torch, MiniLM and 14k-term matcher — ~1.1GB. |
+| Every tab click took 1–3 seconds | Reflex serialises the whole state to Redis per event. The state carried a 150KB base64 resume preview, so an image rode along with each click. `Lock ... held too long time_taken=1.149s` on an event that sets one string. |
+| Every host needed a reverse proxy | Frontend on 3000, backend on 8000; platforms expose one port. |
+| Cold starts looked like a dead app | Websocket-only, so until the backend answers, every control is inert with no feedback. |
 
-| | Before | After |
-|---|---|---|
-| First score (cold models) | ~39s | ~20s |
-| Re-score, warm | ~12s | ~1.5s |
-| Score a new posting | ~39s | ~12s |
-| Rank 13 postings | ~8 min | ~2 min cold, ~23s warm |
+Streamlit removes all four: one port, no websocket state machine, no
+Redis, and one process. `@st.cache_resource` holds the model across
+reruns, which is the thing that was hardest to arrange before.
 
-Cache correctness: `service.clear_caches()` runs on every ingest, which is
-the only way stored rows change while the app is running. Re-extraction
-from the CLI (`scripts/reextract_entities.py`) does not notify a running
-app — restart it after that.
+The trade is that Streamlit re-executes the script top to bottom on every
+interaction, so anything expensive must be cached or kept in
+`st.session_state`. That is a constraint worth having here — it makes the
+cost of each interaction obvious instead of hiding it behind a state
+diff.
 
-The leaderboard scores one posting at a time and pushes each row as it
-lands, sorted, so the table fills in rather than blocking behind a
-spinner for the whole set.
+## Session scoping
 
-## Not done yet
+Resumes carry names, phone numbers and addresses, so every row is stamped
+with a per-browser token (`st.session_state.token`, a UUID) and nothing is
+listed without one. `service.list_resumes("")` returns nothing rather than
+everything — it fails closed. A 24-hour TTL sweep removes what nobody
+deleted, and **Delete my data now** removes a session's rows immediately.
 
-- **No filtering or sorting in the leaderboard.** It is sorted by score
-  server-side; column sorting would need client-side state.
-- **Adzuna search is not wired in.** Postings are pasted or loaded by
-  `scripts/add_jd.py`. The API truncates descriptions at 500 characters,
-  which is not enough to score against, so the UI deliberately doesn't
-  offer it as a shortcut.
-- **Session-scoped, not authenticated.** Every resume and posting is
-  stamped with the Reflex client token and listed only for that session,
-  and `list_resumes("")` returns nothing rather than everything — failing
-  closed, because the open version was the reason this could not be
-  deployed. It is not an account system: there is no login, and session
-  data lives until the TTL sweep rather than until the tab closes, since
-  no "browser closed" signal is reliable.
-- **Chunk embeddings are cached, but not invalidated.**
-  `service.ensure_embeddings` embeds a document only when pgvector holds
-  no chunks for it, which is what makes the leaderboard tolerable. Editing
-  a stored document's text in place would leave stale vectors — re-ingesting
-  writes a new row with a new id, so that case doesn't arise today.
+Uploads are written to `data/uploads/`, parsed, and **deleted straight
+away**: the extracted text and the preview image live in the database, so
+the file itself is not needed again and is personal data. The directory
+is gitignored regardless, so a crash between write and delete cannot leak
+one into version control.
+
+## Error messages
+
+Everything user-visible goes through `service.safe_error`. psycopg2 puts
+the whole connection string into its exceptions, and a deployed instance
+once printed the database password to the front page for anyone who
+loaded it. The sanitiser redacts URI credentials and the configured
+`DATABASE_URL`; three tests cover it.
+
+## What each section does
+
+- **Overview** — quick-start loaders (two sample resumes, five live
+  postings fetched from company job boards, three fictional postings),
+  headline metrics, and recent matches.
+- **Resume** — upload, the rendered first page, the ATS parsability score
+  with its flags, and the skills and titles the parser actually read.
+- **Job postings** — paste a posting whole; required vs nice-to-have is
+  read from its headings.
+- **Match results** — the blended score, the fit band and percentile, and
+  every component with its weight and contribution. Dropped components
+  are named rather than silently zeroed.
+- **Leaderboard** — one resume against every posting in the session,
+  scored one at a time so the table fills in as results land.

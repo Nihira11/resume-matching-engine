@@ -2,7 +2,7 @@
 
 An NLP-powered resume-to-job-description matcher built to mirror how real ATS (Applicant Tracking System) engines actually screen resumes, validated against real job postings rather than synthetic data.
 
-**Stack:** PostgreSQL + pgvector · spaCy + sentence-transformers · BM25 · Reflex (UI) · Anthropic API (LLM rewrite suggestions) · Adzuna API (live jobs)
+**Stack:** PostgreSQL + pgvector · spaCy + sentence-transformers · BM25 · Streamlit (UI) · Adzuna API (live jobs)
 
 **Core scoring model:** weighted blend of hard skill/keyword overlap (highest weight, mirrors real ATS behavior) + title/seniority match + experience match + semantic similarity (secondary signal), plus a standalone ATS parsability check that flags formatting issues (tables, columns, images, headers/footers) independent of resume content.
 
@@ -42,7 +42,7 @@ Full detail in `docs/PARSING-AND-EXTRACTION.md`.
 
 Full detail in `docs/MATCHING-ENGINE.md`; the real-posting run is in `docs/validation-results.md`.
 
-## UI build (Reflex)
+## UI build (Reflex, then Streamlit)
 
 - Upload resume or pick a parsed one; paste a posting or pick a stored one
 - Score breakdown per component, with weights and contributions shown
@@ -50,6 +50,7 @@ Full detail in `docs/MATCHING-ENGINE.md`; the real-posting run is in `docs/valid
 - ATS parsability panel, kept separate from the match score
 - Leaderboard: one resume against every stored posting, filling in as rows land
 - Not wired: Adzuna search (its API truncates descriptions at 500 characters, too little to score against — postings are pasted instead)
+- Rebuilt in Streamlit after four deployment failures traced back to Reflex's architecture (three workers per CPU, whole-state Redis serialisation, two ports, websocket-only cold starts)
 
 Full detail in `docs/UI.md`.
 
@@ -69,7 +70,8 @@ Full detail in `docs/CALIBRATION.md`.
 - Dependencies pinned to what is actually imported; BM25 corpus statistics now ship with the repo
 - Data paths resolved from the repo root — the dashboard had been silently scoring without the keyword component
 - Deployment assessed and documented (`docs/DEPLOYMENT.md`): a Dockerfile exists, and the blocker is that the app has no authentication while holding real resumes
-- Outstanding: screenshots, and the access-model decision before any public deploy
+- Screenshots taken of the Streamlit UI and wired into the README, using the two fictional sample resumes so nothing real is shown
+- Outstanding: the access-model decision before any public deploy
 
 ## Stretch: LLM resume rewrite suggestions
 
