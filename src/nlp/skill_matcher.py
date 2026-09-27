@@ -2,8 +2,8 @@
 Matches free text against the ESCO skills taxonomy dataset (13,939 skills
 via load_taxonomy.py) plus the curated tech skills in tech_skills.py
 
-Uses spaCy's PhraseMatcher for exact/alias matching (case-insensitive)
-against every skill_name + alias in the taxonomy. Deliberately exact-match
+Exact/alias matching (case-insensitive) against every skill_name +
+alias in the taxonomy, via a token n-gram dict -- see SkillMatcher. Deliberately exact-match
 rather than fuzzy: fuzzy matching against a ~14k-term list produces too
 many false positives (e.g. "R" the language matching inside unrelated
 words). Fuzzy/embedding-based similarity is left for later, where it's
@@ -11,7 +11,7 @@ scored as a secondary semantic signal instead of a hard skill match
 
 Every surface form maps to exactly one skill, resolved by precedence:
 curated term > ESCO skill name > ESCO alias. Without that, the same span
-could match two skills and whichever PhraseMatcher returned first won --
+could match two skills and whichever lookup returned first won --
 which is how "TensorFlow" came out as "computer vision"
 """
 from __future__ import annotations
@@ -20,7 +20,6 @@ import re
 from dataclasses import dataclass
 
 import spacy
-from spacy.matcher import PhraseMatcher
 from spacy.util import filter_spans
 
 from src.nlp.tech_skills import CASE_SENSITIVE_TERMS
@@ -120,6 +119,20 @@ def build_term_maps(
 
 
 class SkillMatcher:
+    """Token n-gram lookup over the taxonomy.
+
+    Was a pair of spaCy PhraseMatchers. They hold one Doc per pattern, and
+    the taxonomy expands to 99,400 surface forms, which cost 313MB of
+    resident memory -- more than torch and MiniLM together, and the reason
+    a 1GB deployment was OOM-killed during ingestion.
+
+    A dict keyed on the space-joined tokens of each term does the same job
+    for a fraction of that. It is exactly equivalent: the pattern keys are
+    built with this same tokenizer, so a key matches a span if and only if
+    the PhraseMatcher's token-by-token comparison would have matched it.
+    Overlaps are resolved afterwards by filter_spans, as before.
+    """
+
     def __init__(self, nlp: spacy.language.Language, rows=None):
         """rows defaults to the skills_taxonomy table; pass them directly
         to build a matcher without a database (tests)."""
@@ -127,11 +140,11 @@ class SkillMatcher:
         if rows is None:
             rows = self._fetch_taxonomy()
         insensitive, sensitive = build_term_maps(rows)
-        self.matcher = PhraseMatcher(nlp.vocab, attr="LOWER")
-        self.sensitive_matcher = PhraseMatcher(nlp.vocab, attr="ORTH")
-        self._lookup: dict[int, tuple[int, str]] = {}  # hash -> (skill_id, skill_name)
-        self._add(self.matcher, insensitive)
-        self._add(self.sensitive_matcher, sensitive)
+        self._lower = self._index(insensitive, lower=True)
+        self._orth = self._index(sensitive, lower=False)
+        self._max_tokens = max(
+            [len(key.split(" ")) for key in (*self._lower, *self._orth)] or [1]
+        )
 
     @staticmethod
     def _fetch_taxonomy():
@@ -141,40 +154,60 @@ class SkillMatcher:
 
         return load_taxonomy_rows()
 
-    def _add(self, matcher: PhraseMatcher, term_map: dict[str, tuple[int, str]]) -> None:
-        by_skill: dict[tuple[int, str], list[str]] = {}
+    def _index(
+        self, term_map: dict[str, tuple[int, str]], lower: bool
+    ) -> dict[str, tuple[int, str]]:
+        """Surface forms keyed by their tokenisation, not by raw string.
+
+        Tokenising here is what makes the lookup equivalent to the
+        PhraseMatcher: "scikit-learn" is three tokens to spaCy, so the key
+        has to be "scikit - learn" for it to match the same span in a
+        document. The Docs are discarded as they are built -- holding them
+        is precisely the cost this class exists to avoid.
+        """
+        index: dict[str, tuple[int, str]] = {}
+        tokenizer = self.nlp.tokenizer
         for term, skill in term_map.items():
-            by_skill.setdefault(skill, []).append(term)
-        for (skill_id, skill_name), terms in by_skill.items():
-            key = str(skill_id)
-            matcher.add(key, [self.nlp.make_doc(t) for t in terms])
-            self._lookup[self.nlp.vocab.strings[key]] = (skill_id, skill_name)
+            tokens = [t.lower_ if lower else t.text for t in tokenizer(term) if not t.is_space]
+            if not tokens:
+                continue
+            index.setdefault(" ".join(tokens), skill)
+        return index
 
     def match(self, doc: spacy.tokens.Doc) -> list[SkillMatch]:
-        matches = self.matcher(doc) + self.sensitive_matcher(doc)
-        results = []
-        seen_spans = set()
+        tokens = [t for t in doc if not t.is_space]
+        lowered = [t.lower_ for t in tokens]
+        exact = [t.text for t in tokens]
 
-        for match_id, start, end in matches:
-            span = doc[start:end]
-            key = (span.start_char, span.end_char)
-            if key in seen_spans:
-                continue
-            seen_spans.add(key)
+        results: list[SkillMatch] = []
+        seen_spans: set[tuple[int, int]] = set()
 
-            skill_id, skill_name = self._lookup.get(match_id, (None, None))
-            if skill_id is None:
-                continue
+        for start in range(len(tokens)):
+            limit = min(self._max_tokens, len(tokens) - start)
+            for length in range(limit, 0, -1):
+                end = start + length
+                skill = self._lower.get(" ".join(lowered[start:end]))
+                if skill is None:
+                    skill = self._orth.get(" ".join(exact[start:end]))
+                if skill is None:
+                    continue
 
-            results.append(
-                SkillMatch(
-                    skill_id=skill_id,
-                    skill_name=skill_name,
-                    matched_text=span.text,
-                    start_char=span.start_char,
-                    end_char=span.end_char,
+                first, last = tokens[start], tokens[end - 1]
+                key = (first.idx, last.idx + len(last.text))
+                if key in seen_spans:
+                    continue
+                seen_spans.add(key)
+
+                skill_id, skill_name = skill
+                results.append(
+                    SkillMatch(
+                        skill_id=skill_id,
+                        skill_name=skill_name,
+                        matched_text=doc.text[key[0]:key[1]],
+                        start_char=key[0],
+                        end_char=key[1],
+                    )
                 )
-            )
 
         spans = [doc.char_span(r.start_char, r.end_char) for r in results]
         keep = {(s.start_char, s.end_char) for s in filter_spans([s for s in spans if s])}

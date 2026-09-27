@@ -76,3 +76,29 @@ def test_matcher_only_needs_a_tokenizer():
     nlp = get_nlp()
     assert nlp.pipe_names == []
     assert "Python" in [s.matched_text for s in SkillMatcher(nlp, rows=ROWS).match(nlp("I use Python"))]
+
+
+def test_multiword_skill_matches_across_a_line_break():
+    """Resumes wrap phrases constantly. The old PhraseMatcher compared raw
+    token sequences, so a newline between the words broke the match and
+    "Supply\\nChain Management" scored as nothing. Whitespace tokens are
+    skipped now, so the wrapped form matches the same skill."""
+    assert skills_in("experience with logistic\nregression models") == {"regression analysis"}
+    assert skills_in("Apache\nSpark pipelines") == {"Apache Spark"}
+
+
+def test_line_break_does_not_relax_the_ambiguity_rules():
+    """Skipping whitespace must not smuggle past the case-sensitive and
+    precedence rules the matcher exists to enforce."""
+    assert skills_in("you will\nexcel in this role") == set()
+    assert skills_in("open-\nsource projects") == set()
+
+
+def test_matcher_holds_no_per_pattern_documents():
+    """The taxonomy expands to ~99k surface forms. Holding a spaCy Doc for
+    each cost 313MB and was what OOM-killed a 1GB deployment. The index is
+    plain strings; this fails if a Doc-per-pattern structure comes back."""
+    m = matcher()
+    assert isinstance(m._lower, dict)
+    assert all(isinstance(k, str) for k in m._lower)
+    assert not hasattr(m, "matcher")
