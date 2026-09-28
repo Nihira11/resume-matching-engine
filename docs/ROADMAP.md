@@ -72,7 +72,7 @@ Full detail in `docs/CALIBRATION.md`.
 - Deployment assessed and documented (`docs/DEPLOYMENT.md`); the Docker path went with the Reflex UI, and the remaining blocker is that the app has no authentication while holding real resumes
 - Screenshots taken of the Streamlit UI and wired into the README, using the two fictional sample resumes so nothing real is shown
 - Deployed to Streamlit Community Cloud: <https://resume-matching-engine.streamlit.app/>
-- Outstanding: the app is currently viewer-authenticated, so the sharing setting decides whether the link is a public portfolio demo or a private one
+- Outstanding: confirm the sharing setting makes the link public. A plain `curl` is no guide here, since Streamlit Cloud answers any session-less request with a 303 to `/-/login`; check it in a private browser window instead
 
 ## Stretch: LLM resume rewrite suggestions
 
