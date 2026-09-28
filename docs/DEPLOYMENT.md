@@ -1,7 +1,8 @@
 # Deployment
 
-Target: **Streamlit Community Cloud** — free, no credit card, deploys from
-a GitHub repo, and needs no Docker.
+Live at <https://resume-matching-engine.streamlit.app/>, on **Streamlit
+Community Cloud** — free, no credit card, deploys from a GitHub repo, and
+needs no Docker.
 
 ## Steps
 
@@ -16,8 +17,14 @@ a GitHub repo, and needs no Docker.
    ```
 
    Percent-encode any special characters in the password (`&` → `%26`,
-   `@` → `%40`, `#` → `%23`). Streamlit exposes secrets as environment
-   variables, which is what `src/utils/db.py` reads.
+   `@` → `%40`, `#` → `%23`), and keep it as a **top-level** line — a key
+   under a `[section]` header becomes a nested value, not a plain string.
+
+   Do not rely on secrets arriving as environment variables — the first
+   deploy died on `DATABASE_URL not set`. `streamlit_app.py` copies
+   `st.secrets` into `os.environ` before any page runs, which is what
+   `src/utils/db.py` reads; the engine is kept free of Streamlit imports
+   so scripts and tests can use it too.
 5. Deploy. The first build installs torch and downloads MiniLM, so expect
    several minutes.
 

@@ -71,7 +71,8 @@ Full detail in `docs/CALIBRATION.md`.
 - Data paths resolved from the repo root — the dashboard had been silently scoring without the keyword component
 - Deployment assessed and documented (`docs/DEPLOYMENT.md`); the Docker path went with the Reflex UI, and the remaining blocker is that the app has no authentication while holding real resumes
 - Screenshots taken of the Streamlit UI and wired into the README, using the two fictional sample resumes so nothing real is shown
-- Outstanding: the access-model decision before any public deploy
+- Deployed to Streamlit Community Cloud: <https://resume-matching-engine.streamlit.app/>
+- Outstanding: the app is currently viewer-authenticated, so the sharing setting decides whether the link is a public portfolio demo or a private one
 
 ## Stretch: LLM resume rewrite suggestions
 

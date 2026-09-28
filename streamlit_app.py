@@ -12,7 +12,21 @@ Replaced a Reflex UI -- see docs/UI.md for why.
 
 Run:  streamlit run streamlit_app.py
 """
+import os
+
 import streamlit as st
+
+# Streamlit Community Cloud supplies configuration through st.secrets.
+# The engine reads os.environ instead (src/utils/db.py), so that scripts
+# and tests can use it without importing Streamlit -- so copy the values
+# across before any page runs. A real environment variable wins, and
+# locally load_dotenv() still picks up .env.
+for _key in ("DATABASE_URL", "ADZUNA_APP_ID", "ADZUNA_APP_KEY"):
+    if not os.environ.get(_key):
+        try:
+            os.environ[_key] = str(st.secrets[_key])
+        except (KeyError, FileNotFoundError):
+            pass      # not configured here; db.py reports it if required
 
 st.set_page_config(
     page_title="Resume ↔ Job Matcher",

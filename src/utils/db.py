@@ -39,7 +39,11 @@ _pool_lock = threading.Lock()
 def _database_url() -> str:
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
-        raise RuntimeError("DATABASE_URL not set – check your .env file.")
+        raise RuntimeError(
+            "DATABASE_URL not set. Locally: put it in .env. On Streamlit "
+            "Community Cloud: Manage app -> Settings -> Secrets, as a "
+            "top-level line, not under a [section] header."
+        )
     return database_url
 
 

@@ -3,6 +3,8 @@
 An ATS-style resume screener you can see inside. It scores a resume against a job posting the way a real Applicant Tracking System would — hard skill overlap first, keywords second, semantics last — and shows every number with the weight that produced it, rather than a single
 unexplained percentage.
 
+**Live app:** <https://resume-matching-engine.streamlit.app/> — no sign-up, no upload required: two buttons load sample resumes and postings. Anything you add is scoped to your browser session and deleted after 24 hours.
+
 Calibrated against 40 real job postings labelled by an actual candidate. No posting they called a good fit is rejected; none they ruled out passes.
 
 ```
