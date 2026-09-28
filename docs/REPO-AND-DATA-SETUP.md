@@ -8,6 +8,8 @@ Created the base project layout: `app/` (Reflex UI), `src/` (ingestion, nlp, mat
 
 Reflex skeleton set up with `rxconfig.py`, `state.py`, and a placeholder `resume_matcher.py` entrypoint – confirms `reflex run` works before any real pages exist.
 
+*(Historical: `app/` and the Reflex skeleton were removed when the UI was rebuilt in Streamlit — `streamlit_app.py`, `ui_common.py` and `app_pages/` at the repo root. See `docs/UI.md`.)*
+
 `.gitignore` covers: `.env`, virtual environments, Python cache files, Reflex build artifacts, `data/raw/*`, `data/processed/*`, `data/taxonomy/*` (large reference files, reproducible via scripts rather than committed).
 
 `requirements.txt` covers: Reflex, psycopg2 + pgvector + SQLAlchemy, pdfplumber + python-docx + PyMuPDF, spaCy + sentence-transformers + rank-bm25 + scikit-learn, pandas/numpy/requests/python-dotenv, the Anthropic

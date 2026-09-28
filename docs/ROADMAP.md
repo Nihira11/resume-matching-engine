@@ -69,7 +69,7 @@ Full detail in `docs/CALIBRATION.md`.
 - README rewritten around measured results, with a Mermaid architecture diagram
 - Dependencies pinned to what is actually imported; BM25 corpus statistics now ship with the repo
 - Data paths resolved from the repo root — the dashboard had been silently scoring without the keyword component
-- Deployment assessed and documented (`docs/DEPLOYMENT.md`): a Dockerfile exists, and the blocker is that the app has no authentication while holding real resumes
+- Deployment assessed and documented (`docs/DEPLOYMENT.md`); the Docker path went with the Reflex UI, and the remaining blocker is that the app has no authentication while holding real resumes
 - Screenshots taken of the Streamlit UI and wired into the README, using the two fictional sample resumes so nothing real is shown
 - Outstanding: the access-model decision before any public deploy
 

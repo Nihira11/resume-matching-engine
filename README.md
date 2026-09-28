@@ -1,14 +1,9 @@
 # Resume ↔ Job Matching Engine
 
-An ATS-style resume screener you can see inside. It scores a resume
-against a job posting the way a real Applicant Tracking System would —
-hard skill overlap first, keywords second, semantics last — and shows
-every number with the weight that produced it, rather than a single
+An ATS-style resume screener you can see inside. It scores a resume against a job posting the way a real Applicant Tracking System would — hard skill overlap first, keywords second, semantics last — and shows every number with the weight that produced it, rather than a single
 unexplained percentage.
 
-Calibrated against 40 real job postings labelled by an actual candidate.
-No posting they called a good fit is rejected; none they ruled out
-passes.
+Calibrated against 40 real job postings labelled by an actual candidate. No posting they called a good fit is rejected; none they ruled out passes.
 
 ```
 Data Analyst — Iress                50.2   Likely pass
@@ -19,25 +14,16 @@ Lead Talent Acquisition — Quantium  28.4   Likely reject
 Nurse Practitioner — Eucalyptus     13.4   Likely reject
 ```
 
-> **Screenshots:** added once the app is deployed — match breakdown,
-> leaderboard, resume analysis, gap analysis.
+![Match results: a blended score of 67.5 with every component, weight and contribution listed](images/05-match-score.png)
+
+*Every number is traceable. Experience was dropped here — the posting states no minimum — and the remaining weights renormalised which is why they read 44/22/17/17 rather than 40/20/15/15.*
 
 ## What it does
 
-1. **Parses** a PDF or DOCX resume, and separately checks whether its
-   *formatting* would survive a real ATS: tables, multi-column layouts,
-   images, headers and footers. A resume can match perfectly on content
-   and still be shredded by the parser, so this score is kept out of the
-   match score entirely.
-2. **Extracts** skills against a 14,063-term taxonomy (ESCO plus 124
-   curated modern tools ESCO has never heard of), job titles, education
-   and years of experience.
-3. **Scores** the pair across five components, each with a published
-   weight, and drops any component that has no signal rather than
-   scoring it zero.
-4. **Explains** the result: which required skills matched, which are
-   missing, how often the posting repeated each one, which keywords drove
-   the score, and what to add to the resume.
+1. **Parses** a PDF or DOCX resume, and separately checks whether its *formatting* would survive a real ATS: tables, multi-column layouts, images, headers and footers. A resume can match perfectly on content and still be shredded by the parser, so this score is kept out of the match score entirely.
+2. **Extracts** skills against a 14,063-term taxonomy (ESCO plus 124 curated modern tools ESCO has never heard of), job titles, education and years of experience.
+3. **Scores** the pair across five components, each with a published weight, and drops any component that has no signal rather than scoring it zero.
+4. **Explains** the result: which required skills matched, which are missing, how often the posting repeated each one, which keywords drove the score, and what to add to the resume.
 
 ## The scoring model
 
@@ -49,17 +35,11 @@ Nurse Practitioner — Eucalyptus     13.4   Likely reject
 | Title & seniority | 15% | Role family and level distance | 1.00² |
 | Experience | 10% | Stated years against the advertised minimum | 0.50³ |
 
-¹ Ability to separate "good fit" from "no chance" on the labelled set,
-alone. 0.5 means no signal.
-² Circular — the labels were drafted using "senior role → no", which is
-what this component measures. Not evidence the component works; see
-[`docs/CALIBRATION.md`](docs/CALIBRATION.md).
-³ No signal on this set: only 4 of 40 postings state a minimum, so the
-component is dropped from the blend almost everywhere.
+¹ Ability to separate "good fit" from "no chance" on the labelled set, alone. 0.5 means no signal.
+² Circular — the labels were drafted using "senior role → no", which is what this component measures. Not evidence the component works; see [`docs/CALIBRATION.md`](docs/CALIBRATION.md).
+³ No signal on this set: only 4 of 40 postings state a minimum, so the component is dropped from the blend almost everywhere.
 
-Components that produce no signal are **dropped and the remaining weights
-renormalised**, so a vaguely written posting cannot silently zero part of
-a resume's score.
+Components that produce no signal are **dropped and the remaining weights renormalised**, so a vaguely written posting cannot silently zero part of a resume's score.
 
 ## Architecture
 
@@ -88,71 +68,60 @@ flowchart LR
     F --> J[experience]
     F --> K[semantic · MiniLM chunks]
     G & H & I & J & K --> L[weighted blend<br/>+ gap analysis]
-    L --> M[Reflex dashboard]
+    L --> M[Streamlit dashboard]
 ```
 
 ### It rejects things too
 
-The same resume against a Nurse Practitioner posting scores 13.45, **Weak
-fit**: zero required skills matched, skill overlap and title both 0. The
-negative controls matter as much as the positives — a matcher that only
-ever says yes has not been tested.
+The same resume against a Nurse Practitioner posting scores 13.45, **Weak fit**: zero required skills matched, skill overlap and title both 0. The negative controls matter as much as the positives — a matcher that only ever says yes has not been tested.
+
+![Leaderboard for the table-based resume: 48.7 likely pass, 18.1 and 12.2 likely reject](images/08-leaderboard-table-resume.png)
+
+*A smaller run making the same point: the weaker of the two sample resumes against three postings — one pass, two rejects.*
 
 ### Ranked against every stored posting
 
-One resume against all 41 stored postings, best first: graduate and data
-roles at the top, senior and unrelated roles at the bottom. Rows stream in
-as each posting finishes scoring.
+One resume against all 41 stored postings, best first: graduate and data roles at the top, senior and unrelated roles at the bottom. Rows stream in as each posting finishes scoring.
+
+![Leaderboard for the clean resume: 67.5, 56.0 and 39.9, all likely pass](images/07-leaderboard-clean-resume.png)
+
+*A three-posting session, scored one at a time so the table fills in as each row lands. Matched and missing counts sit beside each score, so a high rank on thin evidence is visible rather than hidden.*
 
 ### Postings are read, not just pasted
 
-A pasted posting is parsed on the way in: a graduate data analyst role
-yields 28 required skills, with the "Requirements" and "Nice to have"
-headings deciding which are mandatory. The original text is kept beside
-them so the extraction can be checked against it.
+A pasted posting is parsed on the way in: a graduate data analyst role yields 28 required skills, with the "Requirements" and "Nice to have" headings deciding which are mandatory. The original text is kept beside them so the extraction can be checked against it.
+
+![Job postings page: 19 required and 9 nice-to-have skills beside the pasted text](images/04-job-posting.png)
+
+*One of the fictional sample postings: 19 required, 9 nice-to-have, split by the posting's own headings.*
 
 ### What the parser actually read
 
-ATS parsability is scored separately from content and never folded into
-the match score. One resume scores a clean 100/100, while six other
-versions of the same CV score 75 because their layout uses a table.
+ATS parsability is scored separately from content and never folded into the match score. One resume scores a clean 100/100, while six other versions of the same CV score 75 because their layout uses a table.
+
+![Resume page: 100/100 parsability, 42 skills found, job titles read](images/03-resume-parsability.png)
+
+*The page-one image sits beside what the parser got out of it, so a parsability score can be checked against the layout that produced it.*
 
 ### Where the gaps are
 
-Missing skills are ordered by requirement, then by how often the posting
-repeats the term, alongside related skills the candidate already has —
-drawn from skills that share ESCO occupations with the missing one.
+Missing skills are ordered by requirement, then by how often the posting repeats the term, alongside related skills the candidate already has — drawn from skills that share ESCO occupations with the missing one.
+
+![Gap analysis: missing skills with mention counts and related skills the candidate already has](images/06-match-gaps.png)
+
+*Suggestions are conditional on the fact — "if they are true" — because the tool cannot know what the candidate has actually done.*
 
 ## What makes it not a keyword cloud
 
-- **BM25 runs against a real corpus.** IDF is a property of a corpus, so
-  document frequencies come from ~2,400 resumes. A two-document
-  comparison would give every term the same IDF and produce an expensive
-  word counter.
-- **Job-posting boilerplate is stripped before scoring.** Benefits,
-  "about us" and EEO sections are half a posting and describe the
-  employer, not the job. Left in, the BM25 query filled with words like
-  "carers" and "parental" while `sql` and `forecasting` fell out of it.
-- **Thin postings can't score highly by accident.** A posting yielding 4
-  extractable skills where the resume matches 2 used to score 50% — above
-  a real data analyst posting yielding 18 where 8 matched. The overlap
-  denominator now has a floor.
-- **Semantic similarity is chunked and measured.** Whole-document
-  embeddings average out to "this is a CV"; pooling per section keeps the
-  signal. The rescale bounds were measured across 268 real matches, not
-  guessed.
-- **Missing signals are dropped, not zeroed.** A student resume with no
-  job-title line scores neutral on title, not 0 — the earlier behaviour
-  zeroed 15% of every score for exactly the people most likely to use the
-  tool.
+- **BM25 runs against a real corpus.** IDF is a property of a corpus, so document frequencies come from ~2,400 resumes. A two-document comparison would give every term the same IDF and produce an expensive word counter.
+- **Job-posting boilerplate is stripped before scoring.** Benefits, "about us" and EEO sections are half a posting and describe the employer, not the job. Left in, the BM25 query filled with words like "carers" and "parental" while `sql` and `forecasting` fell out of it.
+- **Thin postings can't score highly by accident.** A posting yielding 4 extractable skills where the resume matches 2 used to score 50% — above a real data analyst posting yielding 18 where 8 matched. The overlap denominator now has a floor.
+- **Semantic similarity is chunked and measured.** Whole-document embeddings average out to "this is a CV"; pooling per section keeps the signal. The rescale bounds were measured across 268 real matches, not guessed.
+- **Missing signals are dropped, not zeroed.** A student resume with no job-title line scores neutral on title, not 0 — the earlier behaviour zeroed 15% of every score for exactly the people most likely to use the tool.
 
 ## Results
 
-Calibrated on 24 Sep 2026 against 40 real postings (13 pasted from
-LinkedIn/Seek, 27 pulled from Greenhouse/Lever/Ashby APIs), spanning
-graduate through senior roles in quant, data, AI and finance, plus
-deliberate mismatches in nursing, sales and marketing. Six resumes were
-scored against all of them, 240 pairs in total.
+Calibrated on 24 Sep 2026 against 40 real postings (13 pasted from LinkedIn/Seek, 27 pulled from Greenhouse/Lever/Ashby APIs), spanning graduate through senior roles in quant, data, AI and finance, plus deliberate mismatches in nursing, sales and marketing. Six resumes were scored against all of them, 240 pairs in total.
 
 | Candidate's label | likely_pass | borderline | likely_reject |
 |---|---|---|---|
@@ -160,18 +129,11 @@ scored against all of them, 240 pairs in total.
 | maybe (10) | 1 | 4 | 5 |
 | no (23) | 0 | 9 | 14 |
 
-Rank correlation with the candidate's judgement: **0.58** (0.59 before the
-two bug fixes below). Separation of
-"good" from "no": **AUC 0.96**. Leave-one-out band accuracy: **70%**.
+Rank correlation with the candidate's judgement: **0.58** (0.59 before the two bug fixes below). Separation of "good" from "no": **AUC 0.96**. Leave-one-out band accuracy: **70%**.
 
-**The honest weakness, restated after measuring it properly.** The
-headline structural AUC of **0.68** was originally reported as weak domain
-discrimination and blamed on ESCO's generic tail ("communication",
-"statistics"). Both halves of that were wrong, and the correction is more
-interesting than the original claim.
+**The honest weakness, restated after measuring it properly.** The headline structural AUC of **0.68** was originally reported as weak domain discrimination and blamed on ESCO's generic tail ("communication", "statistics"). Both halves of that were wrong, and the correction is more interesting than the original claim.
 
-The pooled 0.68 averages two very different numbers. Split by the
-advertised level of the posting:
+The pooled 0.68 averages two very different numbers. Split by the advertised level of the posting:
 
 | | relevant vs unrelated |
 |---|---|
@@ -179,13 +141,9 @@ advertised level of the posting:
 | senior postings | **AUC 0.33** (inverted) |
 | pooled | 0.68 |
 
-Level and domain are not independent in this label set — the senior
-postings are mostly ones the candidate rejected *because* they were
-senior — so pooling mixes "wrong field" with "too senior" and reports the
-average of a strong signal and an inverted one.
+Level and domain are not independent in this label set — the senior postings are mostly ones the candidate rejected *because* they were senior — so pooling mixes "wrong field" with "too senior" and reports the average of a strong signal and an inverted one.
 
-The rest of the gap is the resume, not the engine. Scoring the same 40
-postings against three different resumes:
+The rest of the gap is the resume, not the engine. Scoring the same 40 postings against three different resumes:
 
 | resume | pooled | mid | senior |
 |---|---|---|---|
@@ -193,31 +151,13 @@ postings against three different resumes:
 | a clean data-science graduate resume | **0.86** | **1.00** | 0.43 |
 | a business analyst resume | 0.73 | 0.80 | 0.57 |
 
-Same engine, same postings, same labels. The candidate's own resume leads
-its skills section with *Customer Service* and *Administration* and its
-two extracted job titles are **Retail Sales Assistant** and **Data Entry
-Officer** — so its genuine overlap with sales postings is real content,
-not a taxonomy artifact. Domain discrimination tracks how clearly the
-resume belongs to a domain, which is the correct behaviour for a tool that
-scores the document it is given.
+Same engine, same postings, same labels. The candidate's own resume leads its skills section with *Customer Service* and *Administration* and its two extracted job titles are **Retail Sales Assistant** and **Data Entry Officer** — so its genuine overlap with sales postings is real content, not a taxonomy artifact. Domain discrimination tracks how clearly the resume belongs to a domain, which is the correct behaviour for a tool that scores the document it is given.
 
-What the investigation did find were two real bugs, both now fixed: scam
-warnings and "meet our team" copy still reaching the embedder on 5 of 62
-postings, and "Senior Account Executive, **Mid** Market" being read as a
-mid-level role because `detect_seniority` takes the lowest rung mentioned.
+What the investigation did find were two real bugs, both now fixed: scam warnings and "meet our team" copy still reaching the embedder on 5 of 62 postings, and "Senior Account Executive, **Mid** Market" being read as a mid-level role because `detect_seniority` takes the lowest rung mentioned.
 
-**Neither fix moves the headline number.** Re-scoring all 280 pairs, the
-pooled AUC moves +0.03, +0.01 and −0.02 across the three resumes — it goes
-*down* on one — and the mid-level figure is identical on all three. That
-is the expected outcome when one posting in 62 carried one bug and five
-carried the other; the fixes are kept because they are correct, not
-because they bought a number. The one control that improved cleanly is the
-contrast-resume ranking, 13 → 14 of 21.
+**Neither fix moves the headline number.** Re-scoring all 280 pairs, the pooled AUC moves +0.03, +0.01 and −0.02 across the three resumes — it goes *down* on one — and the mid-level figure is identical on all three. That is the expected outcome when one posting in 62 carried one bug and five carried the other; the fixes are kept because they are correct, not because they bought a number. The one control that improved cleanly is the contrast-resume ranking, 13 → 14 of 21.
 
-The senior inversion surviving both fixes, on all three resumes, is what
-says the remaining problem is the label design rather than the engine.
-Full numbers, including what was deliberately *not* tuned and why, are in
-[`docs/CALIBRATION.md`](docs/CALIBRATION.md).
+The senior inversion surviving both fixes, on all three resumes, is what says the remaining problem is the label design rather than the engine. Full numbers, including what was deliberately *not* tuned and why, are in [`docs/CALIBRATION.md`](docs/CALIBRATION.md).
 
 ## Getting it running
 
@@ -234,29 +174,25 @@ psql $DATABASE_URL -f db/migrations/002_matching_engine.sql
 python -m src.nlp.load_taxonomy          # ESCO skills → skills_taxonomy
 python -m scripts.load_tech_skills       # + 124 curated modern tools
 
-cd app && reflex run                     # http://localhost:3000
+streamlit run streamlit_app.py           # http://localhost:8501
 ```
 
-**Postings don't ship with the repo** — the text belongs to the employers
-who wrote it, so `data/jds/` is gitignored and the database starts empty.
-In the app, one button pulls five current graduate postings from company
-job boards and another loads three fictional samples; postings can also
-be pasted in. From the command line:
+![Overview before anything is loaded: two-click sample loaders and a summary of what the tool measures](images/01-overview-empty.png)
+
+![Overview with samples loaded: resume and posting selectors, score and rank buttons, session tiles](images/02-overview-loaded.png)
+
+*Nothing is stored against a user: rows are scoped to the browser session and deleted after 24 hours.*
+
+**Postings don't ship with the repo** — the text belongs to the employers who wrote it, so `data/jds/` is gitignored and the database starts empty. In the app, one button pulls five current graduate postings from company job boards and another loads three fictional samples; postings can also be pasted in. From the command line:
 
 ```bash
-python -m scripts.fetch_board_jds        # ~235 live Australian postings,
-                                         # Greenhouse/Lever/Ashby, no API key
+python -m scripts.fetch_board_jds        # ~235 live Australian postings, Greenhouse/Lever/Ashby, no API key
 python -m scripts.build_eval_set         # sample across level and domain, ingest
 ```
 
-`data/eval/labels.csv` records the titles, companies and fit labels behind
-the calibration, so the published numbers can be traced without
-redistributing anyone's job ads.
+`data/eval/labels.csv` records the titles, companies and fit labels behind the calibration, so the published numbers can be traced without redistributing anyone's job ads.
 
-The BM25 corpus statistics ship with the repo
-(`data/processed/bm25_corpus_stats.json`): they are aggregate document
-frequencies with no corpus text, and rebuilding them needs the Kaggle
-resume set, which is not redistributable.
+The BM25 corpus statistics ship with the repo (`data/processed/bm25_corpus_stats.json`): they are aggregate document frequencies with no corpus text, and rebuilding them needs the Kaggle resume set, which is not redistributable.
 
 CLI, if you prefer it to the dashboard:
 
@@ -266,8 +202,7 @@ python -m scripts.add_jd posting.txt                 # store a posting
 python -m src.matching.match_pipeline --resume-id 1 --jd-id 1
 ```
 
-**Note:** changes under `src/` need a Reflex restart — its hot reload
-only watches `app/`.
+**Note:** Streamlit re-executes `streamlit_app.py` on every interaction, so anything expensive is behind `@st.cache_resource` (the service import, and through it the model stack). Edits to `src/` are picked up on the next rerun.
 
 ## Documentation
 
@@ -277,31 +212,20 @@ only watches `app/`.
 | [`docs/validation-results.md`](docs/validation-results.md) | First run against real postings: five bugs no unit test caught |
 | [`docs/MATCHING-ENGINE.md`](docs/MATCHING-ENGINE.md) | Each scoring component, and the reasoning behind it |
 | [`docs/PARSING-AND-EXTRACTION.md`](docs/PARSING-AND-EXTRACTION.md) | Parsing, ATS parsability, NER, taxonomy matching |
-| [`docs/UI.md`](docs/UI.md) | Dashboard structure and the Reflex 0.9 gotchas |
+| [`docs/UI.md`](docs/UI.md) | Dashboard structure, and why the UI moved off Reflex |
 | [`docs/REPO-AND-DATA-SETUP.md`](docs/REPO-AND-DATA-SETUP.md) | Where each dataset comes from |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Deployment assessment, and the auth blocker that comes first |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phases, done and planned |
 
 ## Stack
 
-PostgreSQL + pgvector · spaCy · sentence-transformers (MiniLM) · BM25
-(implemented directly) · Reflex · Adzuna and Greenhouse/Lever/Ashby APIs
+PostgreSQL + pgvector · spaCy · sentence-transformers (MiniLM) · BM25 (implemented directly) · Streamlit · Adzuna and Greenhouse/Lever/Ashby APIs
 
 ## Limitations
 
-- Calibrated on one resume, 40 postings, one labeller. Scores compare
-  postings against each other, not against an external standard.
-- The senior-level structural control is inverted (AUC 0.33) on every
-  resume tried, so it is an engine or label-design problem rather than a
-  property of one resume — see above. Mid-level discrimination is 0.97.
-- ATS parsability is a coarse four-check subtraction; in practice the
-  table check does most of the work.
-- Extraction against a general-purpose taxonomy still produces occasional
-  nonsense ("job opportunities" → *job market offers*).
-- Session-scoped, not authenticated: each browser session sees only what
-  it added, and that data is deleted 24 hours later. Good enough for a
-  public demo; it is not an account system, and anyone who recovers a
-  session token could read that session's data
-  ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
-- 114 tests, all ordering- and behaviour-based rather than asserting
-  magic score constants, so recalibration doesn't break them.
+- Calibrated on one resume, 40 postings, one labeller. Scores compare postings against each other, not against an external standard.
+- The senior-level structural control is inverted (AUC 0.33) on every resume tried, so it is an engine or label-design problem rather than a property of one resume — see above. Mid-level discrimination is 0.97.
+- ATS parsability is a coarse four-check subtraction; in practice the table check does most of the work.
+- Extraction against a general-purpose taxonomy still produces occasional nonsense ("job opportunities" → *job market offers*).
+- Session-scoped, not authenticated: each browser session sees only what it added, and that data is deleted 24 hours later. Good enough for a public demo; it is not an account system, and anyone who recovers a session token could read that session's data ([`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
+- 114 tests, all ordering- and behaviour-based rather than asserting magic score constants, so recalibration doesn't break them.
